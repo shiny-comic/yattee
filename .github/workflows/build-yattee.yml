@@ -23,7 +23,7 @@ jobs:
         run: sudo xcode-select -switch /Applications/Xcode.app  # Ensures the latest Xcode is used
 
       - name: Build for iOS Simulator
-        run: xcodebuild clean build -project Yattee.xcodeproj -scheme "Yattee (iOS)" -destination 'platform=iOS Simulator,name=iPhone 13'
+        run: CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO xcodebuild clean build -project Yattee.xcodeproj -scheme "Yattee (iOS)" -destination 'platform=iOS Simulator,name=iPhone 13'
 
       - name: Upload build artifacts (optional)
         if: success()  # Runs only if builds succeed
