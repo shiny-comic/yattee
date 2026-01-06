@@ -52,11 +52,13 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
         }
 
         configureTransformer(pathPattern("popular"), requestMethods: [.get]) { (content: Entity<JSON>) -> [Video] in
-            content.json.arrayValue.map(self.extractVideo)
+            let videos = content.json.arrayValue.map(self.extractVideo)
+            return self.account.instance.hideVideosWithoutDuration ? videos.filter { $0.length > 0 } : videos
         }
 
         configureTransformer(pathPattern("trending"), requestMethods: [.get]) { (content: Entity<JSON>) -> [Video] in
-            content.json.arrayValue.map(self.extractVideo)
+            let videos = content.json.arrayValue.map(self.extractVideo)
+            return self.account.instance.hideVideosWithoutDuration ? videos.filter { $0.length > 0 } : videos
         }
 
         configureTransformer(pathPattern("search"), requestMethods: [.get]) { (content: Entity<JSON>) -> SearchPage in
@@ -70,7 +72,11 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
                     return ContentItem(playlist: self.extractChannelPlaylist(from: json))
                 }
                 if type == "video" {
-                    return ContentItem(video: self.extractVideo(from: json))
+                    let video = self.extractVideo(from: json)
+                    if self.account.instance.hideVideosWithoutDuration, video.length == 0 {
+                        return nil
+                    }
+                    return ContentItem(video: video)
                 }
 
                 return nil
@@ -101,7 +107,8 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
 
         configureTransformer(pathPattern("auth/feed"), requestMethods: [.get]) { (content: Entity<JSON>) -> [Video] in
             if let feedVideos = content.json.dictionaryValue["videos"] {
-                return feedVideos.arrayValue.map(self.extractVideo)
+                let videos = feedVideos.arrayValue.map(self.extractVideo)
+                return self.account.instance.hideVideosWithoutDuration ? videos.filter { $0.length > 0 } : videos
             }
 
             return []
@@ -152,6 +159,10 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             FeedModel.shared.onAccountChange()
             SubscribedChannelsModel.shared.onAccountChange()
             PlaylistsModel.shared.onAccountChange()
+
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+            }
         }
     }
 
@@ -160,6 +171,9 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
         guard !account.anonymous,
               (account.token?.isEmpty ?? true) || force
         else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+            }
             return
         }
 
@@ -172,6 +186,9 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
                 title: "Account Error",
                 message: "Remove and add your account again in Settings."
             )
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+            }
             return
         }
 
@@ -212,6 +229,8 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
                 }
 
                 self.configure()
+
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
             }
     }
 
@@ -390,7 +409,7 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
     func search(_ query: SearchQuery, page: String?) -> Resource {
         var resource = resource(baseURL: account.url, path: basePathAppending("search"))
             .withParam("q", searchQuery(query.query))
-            .withParam("sort_by", query.sortBy.parameter)
+            .withParam("sort", query.sortBy.parameter)
             .withParam("type", "all")
 
         if let date = query.date, date != .any {
@@ -502,7 +521,7 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             publishedAt: publishedAt,
             likes: json["likeCount"].int,
             dislikes: json["dislikeCount"].int,
-            keywords: json["keywords"].arrayValue.compactMap { $0.string },
+            keywords: json["keywords"].arrayValue.compactMap(\.string),
             streams: extractStreams(from: json),
             related: extractRelated(from: json),
             chapters: createChapters(from: description, thumbnails: json),
@@ -593,6 +612,9 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             // Some instances are not configured properly and return thumbnail links
             // with an incorrect scheme or a missing port.
             components.scheme = accountUrlComponents.scheme
+            if (components.host ?? "") == "" {
+                components.host = accountUrlComponents.host
+            }
             components.port = accountUrlComponents.port
 
             // If basic HTTP authentication is used,
@@ -603,7 +625,6 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             guard let thumbnailUrl = components.url else {
                 return nil
             }
-            print("Final thumbnail URL: \(thumbnailUrl)")
 
             return Thumbnail(url: thumbnailUrl, quality: .init(rawValue: quality)!)
         }
@@ -669,7 +690,7 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             }
             let finalURL: URL
             if let videoId, let itag = stream["itag"].string, account.instance.invidiousCompanion {
-                let companionURLString = "\(account.instance.apiURLString)/latest_version?id=\(videoId)&itag=\(itag)"
+                let companionURLString = "\(account.instance.apiURLString)/companion/latest_version?id=\(videoId)&itag=\(itag)"
                 finalURL = URL(string: companionURLString) ?? streamURL
             } else {
                 finalURL = streamURL
@@ -688,7 +709,8 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
     func extractXTags(from urlString: String) -> [String: String] {
         guard let urlComponents = URLComponents(string: urlString),
               let queryItems = urlComponents.queryItems,
-              let xtagsValue = queryItems.first(where: { $0.name == "xtags" })?.value else {
+              let xtagsValue = queryItems.first(where: { $0.name == "xtags" })?.value
+        else {
             return [:]
         }
 
@@ -721,7 +743,7 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
 
                 let finalURL: URL
                 if let videoId, account.instance.invidiousCompanion {
-                    let audioCompanionURLString = "\(account.instance.apiURLString)/latest_version?id=\(videoId)&itag=\(audioItag)"
+                    let audioCompanionURLString = "\(account.instance.apiURLString)/companion/latest_version?id=\(videoId)&itag=\(audioItag)"
                     finalURL = URL(string: audioCompanionURLString) ?? url
                 } else {
                     finalURL = url
@@ -755,7 +777,7 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             let finalVideoURL: URL
 
             if let videoId, account.instance.invidiousCompanion {
-                let videoCompanionURLString = "\(account.instance.apiURLString)/latest_version?id=\(videoId)&itag=\(videoItag)"
+                let videoCompanionURLString = "\(account.instance.apiURLString)/companion/latest_version?id=\(videoId)&itag=\(videoItag)"
                 finalVideoURL = URL(string: videoCompanionURLString) ?? videoAssetURL
             } else {
                 finalVideoURL = videoAssetURL
@@ -839,7 +861,14 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
 
     private func extractCaptions(from content: JSON) -> [Captions] {
         content["captions"].arrayValue.compactMap { details in
-            guard let url = URL(string: details["url"].stringValue, relativeTo: account.url) else { return nil }
+            var urlString = details["url"].stringValue
+
+            // Prefix with /companion if enabled
+            if account.instance.invidiousCompanion {
+                urlString = "/companion" + urlString
+            }
+
+            guard let url = URL(string: urlString, relativeTo: account.url) else { return nil }
 
             return Captions(
                 label: details["label"].stringValue,
@@ -863,7 +892,11 @@ final class InvidiousAPI: Service, ObservableObject, VideosAPI {
             return ContentItem(playlist: extractChannelPlaylist(from: json))
         }
         if type == "video" {
-            return ContentItem(video: extractVideo(from: json))
+            let video = extractVideo(from: json)
+            if account.instance.hideVideosWithoutDuration, video.length == 0 {
+                return nil
+            }
+            return ContentItem(video: video)
         }
 
         return nil

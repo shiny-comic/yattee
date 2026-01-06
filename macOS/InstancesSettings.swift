@@ -12,6 +12,7 @@ struct InstancesSettings: View {
     @State private var frontendURL = ""
     @State private var proxiesVideos = false
     @State private var invidiousCompanion = false
+    @State private var hideVideosWithoutDuration = false
 
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var accounts = AccountsModel.shared
@@ -71,12 +72,7 @@ struct InstancesSettings: View {
                     }
                 }
 
-                if #available(macOS 12.0, *) {
-                    list
-                        .listStyle(.inset(alternatesRowBackgrounds: true))
-                } else {
-                    list
-                }
+                list.listStyle(.inset(alternatesRowBackgrounds: true))
             }
 
             if selectedInstance != nil, selectedInstance.app.hasFrontendURL {
@@ -114,6 +110,18 @@ struct InstancesSettings: View {
                     .onChange(of: invidiousCompanion) { newValue in
                         InstancesModel.shared.setInvidiousCompanion(selectedInstance, newValue)
                     }
+
+                hideVideosWithoutDurationToggle
+                    .onAppear {
+                        hideVideosWithoutDuration = selectedInstance.hideVideosWithoutDuration
+                    }
+                    .onChange(of: hideVideosWithoutDuration) { newValue in
+                        InstancesModel.shared.setHideVideosWithoutDuration(selectedInstance, newValue)
+                    }
+
+                Text("This can be used to hide shorts")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             if selectedInstance != nil, !selectedInstance.app.supportsAccounts {
@@ -205,6 +213,10 @@ struct InstancesSettings: View {
 
     private var invidiousCompanionToggle: some View {
         Toggle("Invidious companion", isOn: $invidiousCompanion)
+    }
+
+    private var hideVideosWithoutDurationToggle: some View {
+        Toggle("Experimental: Hide videos without duration", isOn: $hideVideosWithoutDuration)
     }
 }
 

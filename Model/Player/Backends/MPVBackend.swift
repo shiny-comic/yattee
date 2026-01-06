@@ -98,6 +98,12 @@ final class MPVBackend: PlayerBackend {
     var controlsUpdates = false
     private var timeObserverThrottle = Throttle(interval: 2)
 
+    // Retry mechanism
+    private var retryCount = 0
+    private let maxRetries = 3
+    private var currentRetryStream: Stream?
+    private var currentRetryVideo: Video?
+
     var suggestedPlaybackRates: [Double] {
         [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4]
     }
@@ -185,7 +191,7 @@ final class MPVBackend: PlayerBackend {
     var audioSampleRate: String {
         client?.audioSampleRate ?? "unknown"
     }
-    
+
     var availableAudioTracks: [Stream.AudioTrack] {
         stream?.audioTracks ?? []
     }
@@ -214,10 +220,14 @@ final class MPVBackend: PlayerBackend {
     typealias AreInIncreasingOrder = (Stream, Stream) -> Bool
 
     func canPlay(_ stream: Stream) -> Bool {
-        stream.format != .av1
+        stream.format != nil && stream.format != .av1
     }
 
     func playStream(_ stream: Stream, of video: Video, preservingTime: Bool, upgrading: Bool) {
+        // Store stream and video for potential retries
+        currentRetryStream = stream
+        currentRetryVideo = video
+
         #if !os(macOS)
             if model.presentingPlayer {
                 DispatchQueue.main.async {
@@ -237,7 +247,7 @@ final class MPVBackend: PlayerBackend {
                 video.captions.first { $0.code.contains(captionsDefaultLanguageCode) }
 
             // If there are still no captions, try to get captions with the fallback language code
-            if captions.isNil && !captionsFallbackLanguageCode.isEmpty {
+            if captions.isNil, !captionsFallbackLanguageCode.isEmpty {
                 captions = video.captions.first { $0.code == captionsFallbackLanguageCode } ??
                     video.captions.first { $0.code.contains(captionsFallbackLanguageCode) }
             }
@@ -326,13 +336,28 @@ final class MPVBackend: PlayerBackend {
                         startPlaying()
                     }
 
-                    stream.audioAsset = AVURLAsset(url: stream.audioTracks[stream.selectedAudioTrackIndex].url)
-                    let fileToLoad = self.model.musicMode ? stream.audioAsset.url : stream.videoAsset.url
-                    let audioTrack = self.model.musicMode ? nil : stream.audioAsset.url
+                    // Handle streams with multiple audio tracks
+                    if !stream.audioTracks.isEmpty {
+                        // Ensure the index is within bounds to prevent race conditions
+                        let safeIndex = min(max(0, stream.selectedAudioTrackIndex), stream.audioTracks.count - 1)
+                        stream.selectedAudioTrackIndex = safeIndex
 
-                    client.loadFile(fileToLoad, audio: audioTrack, bitrate: stream.bitrate, kind: stream.kind, sub: captions?.url, time: time, forceSeekable: stream.kind == .hls) { [weak self] _ in
-                        self?.isLoadingVideo = true
-                        self?.pause()
+                        stream.audioAsset = AVURLAsset(url: stream.audioTracks[safeIndex].url)
+                        let fileToLoad = self.model.musicMode ? stream.audioAsset.url : stream.videoAsset.url
+                        let audioTrack = self.model.musicMode ? nil : stream.audioAsset.url
+
+                        client.loadFile(fileToLoad, audio: audioTrack, bitrate: stream.bitrate, kind: stream.kind, sub: captions?.url, time: time, forceSeekable: stream.kind == .hls) { [weak self] _ in
+                            self?.isLoadingVideo = true
+                            self?.pause()
+                        }
+                    } else {
+                        // Fallback for streams without separate audio tracks (e.g., single asset streams)
+                        let fileToLoad = stream.videoAsset.url
+
+                        client.loadFile(fileToLoad, bitrate: stream.bitrate, kind: stream.kind, sub: captions?.url, time: time, forceSeekable: stream.kind == .hls) { [weak self] _ in
+                            self?.isLoadingVideo = true
+                            self?.pause()
+                        }
                     }
                 }
             }
@@ -344,7 +369,7 @@ final class MPVBackend: PlayerBackend {
                     replaceItem(self.model.preservedTime)
                 }
             } else {
-                replaceItem(self.model.preservedTime)
+                replaceItem(model.preservedTime)
             }
         } else {
             replaceItem(nil)
@@ -375,11 +400,15 @@ final class MPVBackend: PlayerBackend {
         setRate(model.currentRate)
 
         // After the video has ended, hitting play restarts the video from the beginning.
-        if let currentTime, currentTime.seconds.formattedAsPlaybackTime() == model.playerTime.duration.seconds.formattedAsPlaybackTime() &&
-            currentTime.seconds > 0 && model.playerTime.duration.seconds > 0
+        if let currentTime, currentTime.seconds.formattedAsPlaybackTime() == model.playerTime.duration.seconds.formattedAsPlaybackTime(),
+           currentTime.seconds > 0, model.playerTime.duration.seconds > 0
         {
             seek(to: 0, seekType: .loopRestart)
         }
+
+        #if !os(macOS)
+            model.setAudioSessionActive(true)
+        #endif
 
         client?.play()
 
@@ -393,9 +422,6 @@ final class MPVBackend: PlayerBackend {
     }
 
     func pause() {
-        #if !os(macOS)
-            model.setAudioSessionActive(false)
-        #endif
         stopClientUpdates()
         stopRefreshRateUpdates()
 
@@ -417,9 +443,6 @@ final class MPVBackend: PlayerBackend {
     }
 
     func stop() {
-        #if !os(macOS)
-            model.setAudioSessionActive(false)
-        #endif
         stopClientUpdates()
         stopRefreshRateUpdates()
         client?.stop()
@@ -443,23 +466,23 @@ final class MPVBackend: PlayerBackend {
     func closeItem() {
         pause()
         stop()
-        self.video = nil
-        self.stream = nil
+        video = nil
+        stream = nil
     }
 
     func closePiP() {}
 
     func startControlsUpdates() {
         guard model.presentingPlayer, model.controls.presentingControls, !model.controls.presentingOverlays else {
-            self.logger.info("ignored controls update start")
+            logger.info("ignored controls update start")
             return
         }
-        self.logger.info("starting controls updates")
+        logger.info("starting controls updates")
         controlsUpdates = true
     }
 
     func stopControlsUpdates() {
-        self.logger.info("stopping controls updates")
+        logger.info("stopping controls updates")
         controlsUpdates = false
     }
 
@@ -473,23 +496,28 @@ final class MPVBackend: PlayerBackend {
         currentTime = client?.currentTime
         playerItemDuration = client?.duration
 
+        guard let currentTime else {
+            return
+        }
+
         if controlsUpdates {
             updateControls()
         }
 
-        model.updateNowPlayingInfo()
+        #if !os(macOS)
+            model.setupAudioSessionForNowPlaying()
+            model.updateNowPlayingInfo()
+        #endif
 
         handleSegmentsThrottle.execute {
-            if let currentTime {
-                model.handleSegments(at: currentTime)
-            }
+            model.handleSegments(at: currentTime)
         }
 
         timeObserverThrottle.execute {
-            self.model.updateWatch(time: self.currentTime)
+            self.model.updateWatch(time: currentTime)
         }
 
-        self.model.updateTime(self.currentTime!)
+        model.updateTime(currentTime)
     }
 
     private func stopClientUpdates() {
@@ -567,6 +595,13 @@ final class MPVBackend: PlayerBackend {
             onFileLoaded?()
             startClientUpdates()
             onFileLoaded = nil
+            // Reset retry state on successful load
+            resetRetryState()
+            // Re-activate audio session for Now Playing
+            #if !os(macOS)
+                model.setupAudioSessionForNowPlaying()
+                model.updateNowPlayingInfo()
+            #endif
 
         case MPV_EVENT_PROPERTY_CHANGE:
             let dataOpaquePtr = OpaquePointer(event.pointee.data)
@@ -582,9 +617,23 @@ final class MPVBackend: PlayerBackend {
             onFileLoaded?()
             startClientUpdates()
             onFileLoaded = nil
+            // Reset retry state on successful playback restart
+            resetRetryState()
+            // Re-activate audio session for Now Playing
+            #if !os(macOS)
+                model.setupAudioSessionForNowPlaying()
+                model.updateNowPlayingInfo()
+            #endif
 
         case MPV_EVENT_VIDEO_RECONFIG:
             model.updateAspectRatio()
+
+        case MPV_EVENT_AUDIO_RECONFIG:
+            // Re-activate audio session when audio is reconfigured
+            #if !os(macOS)
+                model.setupAudioSessionForNowPlaying()
+                model.updateNowPlayingInfo()
+            #endif
 
         case MPV_EVENT_SEEK:
             isSeeking = true
@@ -595,10 +644,7 @@ final class MPVBackend: PlayerBackend {
             if reason != MPV_END_FILE_REASON_STOP {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    NavigationModel.shared.presentAlert(title: "Error while opening file")
-                    self.model.closeCurrentItem(finished: true)
-                    self.getTimeUpdates()
-                    self.eofPlaybackModeAction()
+                    self.handleFileLoadError()
                 }
             } else {
                 DispatchQueue.main.async { [weak self] in self?.handleEndOfFile() }
@@ -614,6 +660,46 @@ final class MPVBackend: PlayerBackend {
             return
         }
         eofPlaybackModeAction()
+    }
+
+    private func handleFileLoadError() {
+        guard let stream = currentRetryStream, let video = currentRetryVideo else {
+            // No stream info available, show error immediately
+            NavigationModel.shared.presentAlert(title: "Error while opening file")
+            model.closeCurrentItem(finished: true)
+            getTimeUpdates()
+            eofPlaybackModeAction()
+            return
+        }
+
+        if retryCount < maxRetries {
+            retryCount += 1
+            let delay = TimeInterval(retryCount * 2) // 2, 4, 6 seconds
+
+            logger.warning("File load failed. Retry attempt \(retryCount) of \(maxRetries) after \(delay) seconds...")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                self.logger.info("Retrying file load (attempt \(self.retryCount))...")
+                self.playStream(stream, of: video, preservingTime: true, upgrading: false)
+            }
+        } else {
+            // All retries exhausted, show error
+            logger.error("File load failed after \(maxRetries) retry attempts")
+            NavigationModel.shared.presentAlert(title: "Error while opening file")
+            model.closeCurrentItem(finished: true)
+            getTimeUpdates()
+            eofPlaybackModeAction()
+
+            // Reset retry counter for next attempt
+            resetRetryState()
+        }
+    }
+
+    private func resetRetryState() {
+        retryCount = 0
+        currentRetryStream = nil
+        currentRetryVideo = nil
     }
 
     func setNeedsDrawing(_ needsDrawing: Bool) {
@@ -739,6 +825,12 @@ final class MPVBackend: PlayerBackend {
 
     func switchAudioTrack(to index: Int) {
         guard let stream, let video else { return }
+
+        // Validate the index is within bounds
+        guard index >= 0, index < stream.audioTracks.count else {
+            logger.error("Invalid audio track index: \(index), available tracks: \(stream.audioTracks.count)")
+            return
+        }
 
         stream.selectedAudioTrackIndex = index
         model.saveTime { [weak self] in

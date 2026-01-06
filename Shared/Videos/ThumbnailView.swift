@@ -5,16 +5,14 @@ import SwiftUI
 struct ThumbnailView: View {
     var url: URL?
     private let thumbnails = ThumbnailsModel.shared
+    private let thumbnailExtension: String?
 
-    var body: some View {
-        if url != nil {
-            viewForThumbnailExtension
-        } else {
-            placeholder
-        }
+    init(url: URL?) {
+        self.url = url
+        thumbnailExtension = Self.extractExtension(from: url)
     }
 
-    var thumbnailExtension: String? {
+    private static func extractExtension(from url: URL?) -> String? {
         guard let url,
               let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
 
@@ -22,6 +20,14 @@ struct ThumbnailView: View {
         guard pathComponents.count > 1 else { return nil }
 
         return pathComponents.last
+    }
+
+    var body: some View {
+        if url != nil {
+            viewForThumbnailExtension
+        } else {
+            placeholder
+        }
     }
 
     @ViewBuilder var viewForThumbnailExtension: some View {
@@ -48,7 +54,8 @@ struct ThumbnailView: View {
     }
 
     @ViewBuilder var asyncImageIfAvailable: some View {
-        if #available(iOS 15, macOS 12, *) {
+        // swiftlint:disable:next deployment_target
+        if #available(iOS 15.0, macOS 12.0, tvOS 15.0, *) {
             CachedAsyncImage(url: url, urlCache: BaseCacheModel.imageCache) { phase in
                 switch phase {
                 case let .success(image):
@@ -64,11 +71,13 @@ struct ThumbnailView: View {
                 }
             }
         } else {
-            webImage
+            placeholder
         }
     }
 
     var placeholder: some View {
-        Rectangle().fill(Color("PlaceholderColor"))
+        Rectangle()
+            .fill(Color("PlaceholderColor"))
+            .aspectRatio(Constants.aspectRatio16x9, contentMode: .fill)
     }
 }

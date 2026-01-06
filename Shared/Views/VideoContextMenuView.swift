@@ -33,23 +33,21 @@ struct VideoContextMenuView: View {
 
     var body: some View {
         ZStack {
-            // Conditional overlay to block taps on underlying views
-            if isOverlayVisible {
-                Color.clear
-                    .contentShape(Rectangle())
-                #if !os(tvOS)
-                    // This is not available on tvOS < 16 so we leave out.
-                    // TODO: remove #if when setting the minimum deployment target to >= 16
-                    .onTapGesture {
-                        // Dismiss overlay without triggering other interactions
-                        isOverlayVisible = false
-                    }
-                #endif
-                    .ignoresSafeArea() // Ensure overlay covers the entire screen
-                    .accessibilityLabel("Dismiss context menu")
-                    .accessibilityHint("Tap to close the context")
-                    .accessibilityAddTraits(.isButton)
-            }
+            #if os(iOS)
+                // Conditional overlay to block taps on underlying views
+                if isOverlayVisible {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            // Dismiss overlay without triggering other interactions
+                            isOverlayVisible = false
+                        }
+                        .ignoresSafeArea() // Ensure overlay covers the entire screen
+                        .accessibilityLabel("Dismiss context menu")
+                        .accessibilityHint("Tap to close the context")
+                        .accessibilityAddTraits(.isButton)
+                }
+            #endif
 
             if video.videoID != Video.fixtureID {
                 contextMenu
@@ -156,7 +154,9 @@ struct VideoContextMenuView: View {
         }
 
         #if os(tvOS)
-            Button("Cancel", role: .cancel) {}
+            if #unavailable(tvOS 18.0) {
+                Button("Cancel", role: .cancel) {}
+            }
         #endif
     }
 
@@ -309,7 +309,8 @@ struct VideoContextMenuView: View {
             let label = Label("Remove…", systemImage: "trash.fill")
                 .foregroundColor(Color("AppRedColor"))
 
-            if #available(iOS 15, macOS 12, *) {
+            // swiftlint:disable:next deployment_target
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, *) {
                 Button(role: .destructive, action: action) { label }
             } else {
                 Button(action: action) { label }

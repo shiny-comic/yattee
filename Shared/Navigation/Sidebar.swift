@@ -95,15 +95,15 @@ struct Sidebar: View {
 
                 if visibleSections.contains(.popular), accounts.app.supportsPopular {
                     NavigationLink(destination: LazyView(PopularView()), tag: TabSelection.popular, selection: $navigation.tabSelection) {
-                        Label("Popular", systemImage: "arrow.up.right.circle")
+                        Label("Popular", systemImage: "chart.bar.fill")
                             .accessibility(label: Text("Popular"))
                     }
                     .id("popular")
                 }
 
-                if visibleSections.contains(.trending) {
+                if FeatureFlags.trendingEnabled && visibleSections.contains(.trending) {
                     NavigationLink(destination: LazyView(TrendingView()), tag: TabSelection.trending, selection: $navigation.tabSelection) {
-                        Label("Trending", systemImage: "chart.bar")
+                        Label("Trending", systemImage: "arrow.up.right.circle.fill")
                             .accessibility(label: Text("Trending"))
                     }
                     .id("trending")

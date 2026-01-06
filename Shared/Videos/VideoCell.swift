@@ -39,7 +39,7 @@ struct VideoCell: View {
         Button(action: playAction) {
             content
             #if os(tvOS)
-            .frame(width: 580, height: channelOnThumbnail ? 470 : 500)
+            .frame(width: 550, height: channelOnThumbnail ? 446 : 480)
             #endif
         }
         .opacity(contentOpacity)
@@ -432,15 +432,11 @@ struct VideoCell: View {
     }
 
     private var thumbnailImage: some View {
-        Group {
-            VideoCellThumbnail(video: video)
-
-            #if os(tvOS)
-                .frame(minHeight: 320)
-            #endif
-        }
-        .mask(RoundedRectangle(cornerRadius: thumbnailRoundingCornerRadius))
-        .aspectRatio(Constants.aspectRatio16x9, contentMode: .fill)
+        VideoCellThumbnail(video: video)
+        #if os(tvOS)
+            .frame(minHeight: 320)
+        #endif
+            .mask(RoundedRectangle(cornerRadius: thumbnailRoundingCornerRadius))
     }
 
     private var time: String? {
@@ -475,18 +471,13 @@ struct VideoCell: View {
 
 struct VideoCellThumbnail: View {
     let video: Video
-    @ObservedObject private var thumbnails = ThumbnailsModel.shared
+    private var thumbnails: ThumbnailsModel { .shared }
 
     var body: some View {
-        GeometryReader { geometry in
-            let (url, quality) = thumbnails.best(video)
-            let aspectRatio = (quality == .default || quality == .high) ? Constants.aspectRatio4x3 : Constants.aspectRatio16x9
+        let (url, _) = thumbnails.best(video)
 
-            ThumbnailView(url: url)
-                .aspectRatio(aspectRatio, contentMode: .fill)
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
-        }
+        ThumbnailView(url: url)
+            .aspectRatio(Constants.aspectRatio16x9, contentMode: .fill)
     }
 }
 

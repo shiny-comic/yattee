@@ -52,7 +52,7 @@ extension PlayerModel {
     func playItem(_ item: PlayerQueueItem, at time: CMTime? = nil) {
         advancing = false
 
-        if !playingInPictureInPicture, !currentItem.isNil {
+        if !playingInPictureInPicture, !currentItem.isNil, backend != nil {
             backend.closeItem()
         }
 
@@ -125,7 +125,33 @@ extension PlayerModel {
     }
 
     var streamByQualityProfile: Stream? {
+        // Safety check: Ensure backend is available
+        guard backend != nil else {
+            logger.error("Backend is nil when trying to select stream by quality profile")
+            return nil
+        }
+
         let profile = qualityProfile ?? .defaultProfile
+
+        // For AVPlayer, prefer fast-loading formats (HLS/stream) over non-streamable formats
+        // to avoid long loading times when switching backends
+        if activeBackend == .appleAVPlayer, let avBackend = backend as? AVPlayerBackend {
+            // Try to find a fast-loading stream first
+            let fastLoadingStreams = availableStreams.filter { backend.canPlay($0) && avBackend.isFastLoadingFormat($0) }
+            if let fastStream = backend.bestPlayable(
+                fastLoadingStreams.filter { profile.isPreferred($0) },
+                maxResolution: profile.resolution, formatOrder: profile.formats
+            ) {
+                return fastStream
+            }
+            // Fallback to any fast-loading stream
+            if let fastStream = backend.bestPlayable(
+                fastLoadingStreams,
+                maxResolution: profile.resolution, formatOrder: profile.formats
+            ) {
+                return fastStream
+            }
+        }
 
         // First attempt: Filter by both `canPlay` and `isPreferred`
         if let streamPreferredForProfile = backend.bestPlayable(
@@ -229,7 +255,9 @@ extension PlayerModel {
             self.removeQueueItems()
         }
 
-        backend.closeItem()
+        if backend != nil {
+            backend.closeItem()
+        }
     }
 
     @discardableResult func enqueueVideo(
@@ -321,7 +349,7 @@ extension PlayerModel {
         }
 
         restoredQueue.append(contentsOf: Defaults[.queue])
-        queue = restoredQueue.compactMap { $0 }
+        queue = restoredQueue.compactMap(\.self)
         queue.forEach { loadQueueVideoDetails($0) }
     }
 

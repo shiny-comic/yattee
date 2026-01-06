@@ -16,30 +16,18 @@ final class SearchModel: ObservableObject {
     @Published var querySuggestions = [String]()
     private var suggestionsDebouncer = Debouncer(.milliseconds(200))
 
-    @Published var focused = false
-
     @Default(.showSearchSuggestions) private var showSearchSuggestions
 
-    #if os(iOS)
-        var textField: UITextField!
-    #elseif os(macOS)
+    #if os(macOS)
         var textField: NSTextField!
     #endif
 
     var accounts: AccountsModel { .shared }
     private var resource: Resource!
 
-    init() {
-        #if os(iOS)
-            addKeyboardDidHideNotificationObserver()
-        #endif
-    }
+    init() {}
 
-    deinit {
-        #if os(iOS)
-            removeKeyboardDidHideNotificationObserver()
-        #endif
-    }
+    deinit {}
 
     var isLoading: Bool {
         resource?.isLoading ?? false
@@ -158,18 +146,4 @@ final class SearchModel: ObservableObject {
                 }
             }
     }
-
-    #if os(iOS)
-        private func addKeyboardDidHideNotificationObserver() {
-            NotificationCenter.default.addObserver(self, selector: #selector(onKeyboardDidHide), name: UIResponder.keyboardDidHideNotification, object: nil)
-        }
-
-        @objc func onKeyboardDidHide() {
-            focused = false
-        }
-
-        private func removeKeyboardDidHideNotificationObserver() {
-            NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidHideNotification, object: nil)
-        }
-    #endif
 }

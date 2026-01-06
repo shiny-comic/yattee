@@ -34,7 +34,7 @@ struct FavoriteItemView: View {
     var body: some View {
         Group {
             if isVisible {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     itemControl
                         .contextMenu { contextMenu }
                         .contentShape(Rectangle())
@@ -50,9 +50,11 @@ struct FavoriteItemView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundColor(.secondary)
 
-                            if hideShorts || hideWatched {
+                            if (FeatureFlags.hideShortsEnabled && hideShorts) || hideWatched {
                                 AccentButton(text: "Disable filters", maxWidth: nil, verticalPadding: 0, minHeight: 30) {
-                                    hideShorts = false
+                                    if FeatureFlags.hideShortsEnabled {
+                                        hideShorts = false
+                                    }
                                     hideWatched = false
                                     reloadVisibleWatches()
                                 }
@@ -65,23 +67,32 @@ struct FavoriteItemView: View {
                             .padding(.horizontal, 15)
                         #endif
                     } else {
-                        Group {
-                            switch widgetListingStyle {
-                            case .horizontalCells:
-                                HorizontalCells(items: limitedItems)
-                            case .list:
-                                ListView(items: limitedItems)
-                                    .padding(.vertical, 10)
-                                #if os(tvOS)
-                                    .padding(.leading, 40)
-                                #else
-                                    .padding(.horizontal, 15)
-                                #endif
+                        ZStack(alignment: .topLeading) {
+                            // Reserve space immediately to prevent layout shift
+                            Color.clear
+                                .frame(height: expectedContentHeight)
+
+                            // Actual content renders within the reserved space
+                            Group {
+                                switch widgetListingStyle {
+                                case .horizontalCells:
+                                    HorizontalCells(items: limitedItems)
+                                case .list:
+                                    ListView(items: limitedItems)
+                                        .padding(.vertical, 10)
+                                    #if os(tvOS)
+                                        .padding(.leading, 40)
+                                    #else
+                                        .padding(.horizontal, 15)
+                                    #endif
+                                }
                             }
+                            .environment(\.inChannelView, inChannelView)
                         }
-                        .environment(\.inChannelView, inChannelView)
+                        .animation(nil, value: store.contentItems.count)
                     }
                 }
+                .animation(nil, value: store.contentItems.count)
                 .contentShape(Rectangle())
                 .onAppear {
                     if item.section == .history {
@@ -97,7 +108,7 @@ struct FavoriteItemView: View {
                     resource?.removeObservers(ownedBy: store)
                 }
                 .onChange(of: player.currentVideo) { _ in if !player.presentingPlayer { reloadVisibleWatches() } }
-                .onChange(of: hideShorts) { _ in if !player.presentingPlayer { reloadVisibleWatches() } }
+                .onChange(of: hideShorts) { _ in if !player.presentingPlayer && FeatureFlags.hideShortsEnabled { reloadVisibleWatches() } }
                 .onChange(of: hideWatched) { _ in if !player.presentingPlayer { reloadVisibleWatches() } }
                 // Delay is necessary to update the list with the new items.
                 .onChange(of: favoritesChanged) { _ in if !player.presentingPlayer { Delay.by(1.0) { reloadVisibleWatches() } } }
@@ -125,9 +136,9 @@ struct FavoriteItemView: View {
 
     var emptyItemsText: String {
         var filterText = ""
-        if hideShorts && hideWatched {
+        if FeatureFlags.hideShortsEnabled && hideShorts && hideWatched {
             filterText = "(watched and shorts hidden)"
-        } else if hideShorts {
+        } else if FeatureFlags.hideShortsEnabled && hideShorts {
             filterText = "(shorts hidden)"
         } else if hideWatched {
             filterText = "(watched hidden)"
@@ -197,13 +208,19 @@ struct FavoriteItemView: View {
     }
 
     var limitedItems: [ContentItem] {
-        var items: [ContentItem]
+        let limit = favoritesModel.limit(item)
         if item.section == .history {
-            items = visibleWatches.map { ContentItem(video: player.historyVideo($0.videoID) ?? $0.video) }
-        } else {
-            items = store.contentItems.filter { itemVisible($0) }
+            return Array(visibleWatches.prefix(limit).map { ContentItem(video: player.historyVideo($0.videoID) ?? $0.video) })
         }
-        return Array(items.prefix(favoritesModel.limit(item)))
+        var result = [ContentItem]()
+        result.reserveCapacity(min(store.contentItems.count, limit))
+        for contentItem in store.contentItems where itemVisible(contentItem) {
+            result.append(contentItem)
+            if result.count >= limit {
+                break
+            }
+        }
+        return result
     }
 
     func itemVisible(_ item: ContentItem) -> Bool {
@@ -211,7 +228,7 @@ struct FavoriteItemView: View {
             return false
         }
 
-        guard hideShorts, item.contentType == .video, let video = item.video else {
+        guard FeatureFlags.hideShortsEnabled, hideShorts, item.contentType == .video, let video = item.video else {
             return true
         }
 
@@ -225,6 +242,23 @@ struct FavoriteItemView: View {
 
     var widgetListingStyle: WidgetListingStyle {
         favoritesModel.listingStyle(item)
+    }
+
+    var expectedContentHeight: Double {
+        switch widgetListingStyle {
+        case .horizontalCells:
+            #if os(tvOS)
+                return 600
+            #else
+                return 290
+            #endif
+        case .list:
+            // Approximate height for list view items
+            let itemCount = favoritesModel.limit(item)
+            let itemHeight: Double = 70 // Approximate height per item
+            let padding: Double = 20
+            return Double(itemCount) * itemHeight + padding
+        }
     }
 
     func loadCacheAndResource(force: Bool = false) {
@@ -318,7 +352,7 @@ struct FavoriteItemView: View {
         case .history:
             return false
         case .trending:
-            return visibleSections.contains(.trending)
+            return FeatureFlags.trendingEnabled && visibleSections.contains(.trending)
         case .subscriptions:
             return visibleSections.contains(.subscriptions) && accounts.signedIn
         case .popular:

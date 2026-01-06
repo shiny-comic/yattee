@@ -53,9 +53,16 @@ struct PlayerControlsSettings: View {
                 List {
                     sections
                 }
+                #if os(tvOS)
+                .listStyle(.plain)
+                #elseif os(iOS)
+                .listStyle(.insetGrouped)
+                #endif
             #endif
         }
         #if os(tvOS)
+        .buttonStyle(.plain)
+        .toggleStyle(TVOSPlainToggleStyle())
         .frame(maxWidth: 1000)
         #elseif os(iOS)
         .listStyle(.insetGrouped)
@@ -125,12 +132,25 @@ struct PlayerControlsSettings: View {
         }
 
         Section {
-            Picker("Action button labels", selection: $playerActionsButtonLabelStyle) {
-                ForEach(ButtonLabelStyle.allCases, id: \.rawValue) { style in
-                    Text(style.description).tag(style)
+            #if os(macOS)
+                HStack {
+                    Text("Action button labels")
+                    Spacer()
+                    Picker("Action button labels", selection: $playerActionsButtonLabelStyle) {
+                        ForEach(ButtonLabelStyle.allCases, id: \.rawValue) { style in
+                            Text(style.description).tag(style)
+                        }
+                    }
+                    .modifier(SettingsPickerModifier())
                 }
-            }
-            .modifier(SettingsPickerModifier())
+            #else
+                Picker("Action button labels", selection: $playerActionsButtonLabelStyle) {
+                    ForEach(ButtonLabelStyle.allCases, id: \.rawValue) { style in
+                        Text(style.description).tag(style)
+                    }
+                }
+                .modifier(SettingsPickerModifier())
+            #endif
         }
     }
 
@@ -143,14 +163,54 @@ struct PlayerControlsSettings: View {
             #endif
         }
 
-        return Picker("System controls buttons", selection: $systemControlsCommands) {
-            Text(labelText("Seek".localized())).tag(SystemControlsCommands.seek)
-            Text(labelText("Restart/Play next".localized())).tag(SystemControlsCommands.restartAndAdvanceToNext)
-        }
-        .onChange(of: systemControlsCommands) { _ in
-            player.updateRemoteCommandCenter()
-        }
-        .modifier(SettingsPickerModifier())
+        #if os(tvOS)
+            // Custom implementation for tvOS to avoid focus overlay
+            return VStack(alignment: .leading, spacing: 0) {
+                Text("System controls buttons")
+                    .font(.headline)
+                    .padding(.vertical, 8)
+
+                Button(action: { systemControlsCommands = .seek }) {
+                    HStack {
+                        Text(labelText("Seek".localized()))
+                        Spacer()
+                        if systemControlsCommands == .seek {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 4)
+
+                Button(action: {
+                    systemControlsCommands = .restartAndAdvanceToNext
+                    player.updateRemoteCommandCenter()
+                }) {
+                    HStack {
+                        Text(labelText("Restart/Play next".localized()))
+                        Spacer()
+                        if systemControlsCommands == .restartAndAdvanceToNext {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 4)
+            }
+        #else
+            return Picker("System controls buttons", selection: $systemControlsCommands) {
+                Text(labelText("Seek".localized())).tag(SystemControlsCommands.seek)
+                Text(labelText("Restart/Play next".localized())).tag(SystemControlsCommands.restartAndAdvanceToNext)
+            }
+            .onChange(of: systemControlsCommands) { _ in
+                player.updateRemoteCommandCenter()
+            }
+            .modifier(SettingsPickerModifier())
+        #endif
     }
 
     @ViewBuilder private var controlsLayoutFooter: some View {
@@ -254,12 +314,12 @@ struct PlayerControlsSettings: View {
                         .labelStyle(.iconOnly)
                         .padding(7)
                         .foregroundColor(.accentColor)
-                        .accessibilityAddTraits(.isButton)
                     #if os(iOS)
                         .frame(minHeight: 35)
                         .background(RoundedRectangle(cornerRadius: 4).strokeBorder(lineWidth: 1).foregroundColor(.accentColor))
                     #endif
                         .contentShape(Rectangle())
+                        .accessibilityAddTraits(.isButton)
                         .onTapGesture {
                             var intValue = Int(value.wrappedValue) ?? 10
                             intValue -= 5
@@ -290,11 +350,11 @@ struct PlayerControlsSettings: View {
                         .labelStyle(.iconOnly)
                         .padding(7)
                         .foregroundColor(.accentColor)
-                        .accessibilityAddTraits(.isButton)
                     #if os(iOS)
                         .background(RoundedRectangle(cornerRadius: 4).strokeBorder(lineWidth: 1).foregroundColor(.accentColor))
                     #endif
                         .contentShape(Rectangle())
+                        .accessibilityAddTraits(.isButton)
                         .onTapGesture {
                             var intValue = Int(value.wrappedValue) ?? 10
                             intValue += 5
@@ -319,7 +379,9 @@ struct PlayerControlsSettings: View {
         }
         Group {
             #if os(iOS)
-                Toggle("Lock orientation", isOn: $actionButtonLockOrientationEnabled)
+                if !Constants.isIPad {
+                    Toggle("Lock orientation", isOn: $actionButtonLockOrientationEnabled)
+                }
             #endif
             Toggle("Restart", isOn: $actionButtonRestartEnabled)
             Toggle("Play next item", isOn: $actionButtonAdvanceToNextItemEnabled)
@@ -331,7 +393,9 @@ struct PlayerControlsSettings: View {
 
     @ViewBuilder private var controlButtonToggles: some View {
         #if os(iOS)
-            Toggle("Lock orientation", isOn: $playerControlsLockOrientationEnabled)
+            if !Constants.isIPad {
+                Toggle("Lock orientation", isOn: $playerControlsLockOrientationEnabled)
+            }
         #endif
         Toggle("Settings", isOn: $playerControlsSettingsEnabled)
         #if !os(tvOS)

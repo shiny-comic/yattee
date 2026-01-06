@@ -52,10 +52,14 @@ struct BrowsingSettings: View {
                 }
                 #if os(iOS)
                 .listStyle(.insetGrouped)
+                #elseif os(tvOS)
+                .listStyle(.plain)
                 #endif
             #endif
         }
         #if os(tvOS)
+        .buttonStyle(.plain)
+        .toggleStyle(TVOSPlainToggleStyle())
         .frame(maxWidth: 1200)
         #else
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -111,6 +115,9 @@ struct BrowsingSettings: View {
                     NavigationLink(destination: LazyView(HomeSettings())) {
                         Text("Home Settings")
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
                 #endif
             }
         }
@@ -138,11 +145,25 @@ struct BrowsingSettings: View {
         }
 
         func playerBarGesturePicker(_ label: String, selection: Binding<PlayerTapGestureAction>) -> some View {
-            Picker(label, selection: selection) {
-                ForEach(PlayerTapGestureAction.allCases, id: \.rawValue) { action in
-                    Text(action.label.localized()).tag(action)
+            #if os(macOS)
+                HStack {
+                    Text(label)
+                    Spacer()
+                    Picker(label, selection: selection) {
+                        ForEach(PlayerTapGestureAction.allCases, id: \.rawValue) { action in
+                            Text(action.label.localized()).tag(action)
+                        }
+                    }
+                    .modifier(SettingsPickerModifier())
                 }
-            }
+            #else
+                Picker(label, selection: selection) {
+                    ForEach(PlayerTapGestureAction.allCases, id: \.rawValue) { action in
+                        Text(action.label.localized()).tag(action)
+                    }
+                }
+                .modifier(SettingsPickerModifier())
+            #endif
         }
 
         var playerBarFooter: some View {
@@ -164,7 +185,7 @@ struct BrowsingSettings: View {
             #if os(iOS)
                 Toggle("Show Documents", isOn: $showDocuments)
 
-                if Constants.isIPad {
+                if Constants.isIPhone {
                     Toggle("Lock portrait mode", isOn: $lockPortraitWhenBrowsing)
                         .onChange(of: lockPortraitWhenBrowsing) { lock in
                             if lock {
@@ -213,22 +234,37 @@ struct BrowsingSettings: View {
     }
 
     private var thumbnailsQualityPicker: some View {
-        Picker("Quality", selection: $thumbnailsQuality) {
-            ForEach(ThumbnailsQuality.allCases, id: \.self) { quality in
-                Text(quality.description)
+        #if os(macOS)
+            HStack {
+                Text("Quality")
+                Spacer()
+                Picker("Quality", selection: $thumbnailsQuality) {
+                    ForEach(ThumbnailsQuality.allCases, id: \.self) { quality in
+                        Text(quality.description)
+                    }
+                }
+                .modifier(SettingsPickerModifier())
             }
-        }
-        .modifier(SettingsPickerModifier())
+        #else
+            Picker("Quality", selection: $thumbnailsQuality) {
+                ForEach(ThumbnailsQuality.allCases, id: \.self) { quality in
+                    Text(quality.description)
+                }
+            }
+            .modifier(SettingsPickerModifier())
+        #endif
     }
 
     private var visibleSectionsSettings: some View {
         Section(header: SettingsHeader(text: "Sections".localized())) {
             ForEach(VisibleSection.allCases, id: \.self) { section in
-                MultiselectRow(
-                    title: section.title,
-                    selected: visibleSections.contains(section)
-                ) { value in
-                    toggleSection(section, value: value)
+                if section != .trending || FeatureFlags.trendingEnabled {
+                    MultiselectRow(
+                        title: section.title,
+                        selected: visibleSections.contains(section)
+                    ) { value in
+                        toggleSection(section, value: value)
+                    }
                 }
             }
         }
@@ -239,12 +275,29 @@ struct BrowsingSettings: View {
             #if os(tvOS)
                 SettingsHeader(text: "Startup section".localized())
             #endif
-            Picker("Startup section", selection: $startupSection) {
-                ForEach(StartupSection.allCases, id: \.rawValue) { section in
-                    Text(section.label).tag(section)
+            #if os(macOS)
+                HStack {
+                    Text("Startup section")
+                    Spacer()
+                    Picker("Startup section", selection: $startupSection) {
+                        ForEach(StartupSection.allCases, id: \.rawValue) { section in
+                            if section != .trending || FeatureFlags.trendingEnabled {
+                                Text(section.label).tag(section)
+                            }
+                        }
+                    }
+                    .modifier(SettingsPickerModifier())
                 }
-            }
-            .modifier(SettingsPickerModifier())
+            #else
+                Picker("Startup section", selection: $startupSection) {
+                    ForEach(StartupSection.allCases, id: \.rawValue) { section in
+                        if section != .trending || FeatureFlags.trendingEnabled {
+                            Text(section.label).tag(section)
+                        }
+                    }
+                }
+                .modifier(SettingsPickerModifier())
+            #endif
         }
     }
 

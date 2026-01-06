@@ -11,6 +11,8 @@ import SwiftUI
 final class AVPlayerBackend: PlayerBackend {
     static let assetKeysToLoad = ["tracks", "playable", "duration"]
 
+    @Default(.avPlayerAllowsNonStreamableFormats) private var allowsNonStreamableFormats
+
     private var logger = Logger(label: "avplayer-backend")
 
     var model: PlayerModel { .shared }
@@ -110,6 +112,14 @@ final class AVPlayerBackend: PlayerBackend {
 
     var controlsUpdates = false
 
+    // Retry mechanism
+    private var retryCount = 0
+    private let maxRetries = 3
+    private var currentRetryStream: Stream?
+    private var currentRetryVideo: Video?
+    private var currentRetryPreservingTime = false
+    private var currentRetryUpgrading = false
+
     init() {
         addFrequentTimeObserver()
         addInfrequentTimeObserver()
@@ -142,7 +152,36 @@ final class AVPlayerBackend: PlayerBackend {
     }
 
     func canPlay(_ stream: Stream) -> Bool {
-        stream.kind == .hls || stream.kind == .stream
+        // AVPlayer has a fundamental limitation with MP4/AVC1 progressive downloads:
+        // If the moov atom is at the end of the file (common case), it must download
+        // the entire file before playback can start. MPV doesn't have this limitation.
+        // By default, reject non-HLS MP4/AVC1 streams unless user explicitly enables them.
+
+        // Check if this is a non-streamable format (MP4/AVC1) that isn't HLS
+        let isNonStreamableFormat = stream.kind != .hls && (stream.format == .mp4 || stream.format == .avc1)
+
+        if isNonStreamableFormat && !allowsNonStreamableFormats {
+            return false
+        }
+
+        // If non-streamable formats are enabled, allow MP4/AVC1 adaptive streams
+        // but limit to 1080p maximum (higher resolutions can't be played properly)
+        if isNonStreamableFormat && allowsNonStreamableFormats {
+            let maxHeight = 1080
+            if let resolution = stream.resolution, resolution.height > maxHeight {
+                return false
+            }
+            return true
+        }
+
+        // AVPlayer works well with HLS and stream formats
+        return stream.kind == .hls || stream.kind == .stream
+    }
+
+    func isFastLoadingFormat(_ stream: Stream) -> Bool {
+        // HLS and stream formats load quickly
+        // Non-streamable MP4/AVC1 formats may take a long time
+        return stream.kind == .hls || stream.kind == .stream
     }
 
     func playStream(
@@ -151,6 +190,12 @@ final class AVPlayerBackend: PlayerBackend {
         preservingTime: Bool,
         upgrading: Bool
     ) {
+        // Store stream and video for potential retries
+        currentRetryStream = stream
+        currentRetryVideo = video
+        currentRetryPreservingTime = preservingTime
+        currentRetryUpgrading = upgrading
+
         isLoadingVideo = true
 
         if let url = stream.singleAssetURL {
@@ -176,8 +221,8 @@ final class AVPlayerBackend: PlayerBackend {
         }
 
         // After the video has ended, hitting play restarts the video from the beginning.
-        if currentTime?.seconds.formattedAsPlaybackTime() == model.playerTime.duration.seconds.formattedAsPlaybackTime() &&
-            currentTime!.seconds > 0 && model.playerTime.duration.seconds > 0
+        if currentTime?.seconds.formattedAsPlaybackTime() == model.playerTime.duration.seconds.formattedAsPlaybackTime(),
+           currentTime!.seconds > 0, model.playerTime.duration.seconds > 0
         {
             seek(to: 0, seekType: .loopRestart)
         }
@@ -198,9 +243,6 @@ final class AVPlayerBackend: PlayerBackend {
         guard avPlayer.timeControlStatus != .paused else {
             return
         }
-        #if !os(macOS)
-            model.setAudioSessionActive(false)
-        #endif
         avPlayer.pause()
         model.objectWillChange.send()
     }
@@ -214,9 +256,6 @@ final class AVPlayerBackend: PlayerBackend {
     }
 
     func stop() {
-        #if !os(macOS)
-            model.setAudioSessionActive(false)
-        #endif
         avPlayer.replaceCurrentItem(with: nil)
         hasStarted = false
     }
@@ -271,9 +310,7 @@ final class AVPlayerBackend: PlayerBackend {
                     self?.insertPlayerItem(stream, for: video, preservingTime: preservingTime, upgrading: upgrading)
                 }
             case .failed:
-                DispatchQueue.main.async { [weak self] in
-                    self?.model.playerError = error
-                }
+                self?.handleFileLoadError(error: error)
             default:
                 return
             }
@@ -298,12 +335,12 @@ final class AVPlayerBackend: PlayerBackend {
         preservingTime: Bool = false,
         model: PlayerModel
     ) {
+        model.logger.info("loading \(type.rawValue) track")
+
         asset.loadValuesAsynchronously(forKeys: Self.assetKeysToLoad) { [weak self] in
             guard let self else {
                 return
             }
-            model.logger.info("loading \(type.rawValue) track")
-
             let assetTracks = asset.tracks(withMediaType: type)
 
             guard let compositionTrack = self.composition.addMutableTrack(
@@ -534,6 +571,9 @@ final class AVPlayerBackend: PlayerBackend {
 
             switch playerItem.status {
             case .readyToPlay:
+                // Reset retry state on successful load
+                self.resetRetryState()
+
                 if self.model.activeBackend == .appleAVPlayer,
                    self.isAutoplaying(playerItem)
                 {
@@ -571,9 +611,7 @@ final class AVPlayerBackend: PlayerBackend {
                 }
 
             case .failed:
-                DispatchQueue.main.async {
-                    self.model.playerError = item.error
-                }
+                self.handleFileLoadError(error: item.error)
 
             default:
                 return
@@ -842,4 +880,44 @@ final class AVPlayerBackend: PlayerBackend {
     func setNeedsDrawing(_: Bool) {}
     func setSize(_: Double, _: Double) {}
     func setNeedsNetworkStateUpdates(_: Bool) {}
+
+    private func handleFileLoadError(error: Error?) {
+        guard let stream = currentRetryStream, let video = currentRetryVideo else {
+            // No stream info available, show error immediately
+            DispatchQueue.main.async {
+                self.model.playerError = error
+            }
+            return
+        }
+
+        if retryCount < maxRetries {
+            retryCount += 1
+            let delay = TimeInterval(retryCount * 2) // 2, 4, 6 seconds
+
+            logger.warning("File load failed. Retry attempt \(retryCount) of \(maxRetries) after \(delay) seconds...")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                self.logger.info("Retrying file load (attempt \(self.retryCount))...")
+                self.playStream(stream, of: video, preservingTime: self.currentRetryPreservingTime, upgrading: self.currentRetryUpgrading)
+            }
+        } else {
+            // All retries exhausted, show error
+            logger.error("File load failed after \(maxRetries) retry attempts")
+            DispatchQueue.main.async {
+                self.model.playerError = error
+            }
+
+            // Reset retry counter for next attempt
+            resetRetryState()
+        }
+    }
+
+    private func resetRetryState() {
+        retryCount = 0
+        currentRetryStream = nil
+        currentRetryVideo = nil
+        currentRetryPreservingTime = false
+        currentRetryUpgrading = false
+    }
 }

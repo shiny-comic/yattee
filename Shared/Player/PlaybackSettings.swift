@@ -54,6 +54,7 @@ struct PlaybackSettings: View {
                     Spacer()
                         .frame(maxWidth: 50, alignment: .trailing)
                 }
+                .padding(.top, 10)
 
                 HStack {
                     controlsHeader("Playback Mode".localized())
@@ -204,19 +205,26 @@ struct PlaybackSettings: View {
     @ViewBuilder private var rateButton: some View {
         #if os(macOS)
             ratePicker
-                .labelsHidden()
-                .frame(maxWidth: 100)
+                .modifier(SettingsPickerModifier())
+                .controlSize(.large)
+                .frame(width: 100, alignment: .center)
         #elseif os(iOS)
-            Menu {
-                ratePicker
-            } label: {
+            ZStack {
                 Text(player.rateLabel(player.currentRate))
                     .foregroundColor(.primary)
                     .frame(width: 70)
+
+                Menu {
+                    ratePicker
+                } label: {
+                    Text(player.rateLabel(player.currentRate))
+                        .foregroundColor(.primary)
+                        .frame(width: 70)
+                        .opacity(0)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
-            .buttonStyle(.plain)
-            .foregroundColor(.primary)
             .frame(width: 70, height: 40)
         #else
             Text(player.rateLabel(player.currentRate))
@@ -240,19 +248,31 @@ struct PlaybackSettings: View {
                 player.currentRate = rate
             }
         } label: {
-            Label("Increase rate", systemImage: "plus")
-                .foregroundColor(.accentColor)
-                .imageScale(.large)
-                .labelStyle(.iconOnly)
-            #if os(iOS)
-                .padding(12)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 1))
-                .contentShape(Rectangle())
+            #if os(macOS)
+                Image(systemName: "plus")
+                    .imageScale(.large)
+                    .frame(width: 16, height: 16)
+            #else
+                Label("Increase rate", systemImage: "plus")
+                    .imageScale(.large)
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .padding(12)
+                    .frame(width: 40, height: 40)
+                    .background(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 1))
+                    .contentShape(Rectangle())
             #endif
         }
         #if os(macOS)
         .buttonStyle(.bordered)
+        .controlSize(.large)
+        .frame(minWidth: 32, minHeight: 28)
+        .fixedSize()
+        #elseif os(iOS)
+        .buttonStyle(.plain)
+        #else
+        .buttonStyle(.bordered)
+        .controlSize(.large)
         #endif
         .disabled(increasedRate.isNil)
     }
@@ -265,22 +285,33 @@ struct PlaybackSettings: View {
                 player.currentRate = rate
             }
         } label: {
-            Label("Decrease rate", systemImage: "minus")
-                .foregroundColor(.accentColor)
-                .imageScale(.large)
-                .labelStyle(.iconOnly)
-            #if os(iOS)
-                .padding(12)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 1))
-                .contentShape(Rectangle())
+            #if os(macOS)
+                Image(systemName: "minus")
+                    .imageScale(.large)
+                    .frame(width: 16, height: 16)
+            #else
+                Label("Decrease rate", systemImage: "minus")
+                    .imageScale(.large)
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .padding(12)
+                    .frame(width: 40, height: 40)
+                    .background(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 1))
+                    .contentShape(Rectangle())
             #endif
         }
         #if os(macOS)
         .buttonStyle(.bordered)
+        .controlSize(.large)
+        .frame(minWidth: 32, minHeight: 28)
+        .fixedSize()
         #elseif os(iOS)
+        .buttonStyle(.plain)
+        #else
+        .buttonStyle(.bordered)
+        .controlSize(.large)
         #endif
-            .disabled(decreasedRate.isNil)
+        .disabled(decreasedRate.isNil)
     }
 
     private var rateButtonsSpacing: Double {
@@ -303,16 +334,23 @@ struct PlaybackSettings: View {
         #elseif os(macOS)
             playbackModePicker
                 .modifier(SettingsPickerModifier())
-            #if os(macOS)
-                .frame(maxWidth: 150)
-            #endif
+                .controlSize(.large)
+                .frame(width: 300, alignment: .trailing)
         #else
-            Menu {
-                playbackModePicker
-            } label: {
+            ZStack {
                 Label(player.playbackMode.description.localized(), systemImage: player.playbackMode.systemImage)
+                    .foregroundColor(.accentColor)
+
+                Menu {
+                    playbackModePicker
+                } label: {
+                    Label(player.playbackMode.description.localized(), systemImage: player.playbackMode.systemImage)
+                        .foregroundColor(.accentColor)
+                        .opacity(0)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
         #endif
     }
 
@@ -328,18 +366,26 @@ struct PlaybackSettings: View {
     @ViewBuilder private var qualityProfileButton: some View {
         #if os(macOS)
             qualityProfilePicker
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                .modifier(SettingsPickerModifier())
+                .controlSize(.large)
+                .frame(width: 300, alignment: .trailing)
         #elseif os(iOS)
-            Menu {
-                qualityProfilePicker
-            } label: {
+            ZStack {
                 Text(player.qualityProfileSelection?.description ?? "Automatic".localized())
+                    .foregroundColor(.accentColor)
                     .frame(maxWidth: 240, alignment: .trailing)
+
+                Menu {
+                    qualityProfilePicker
+                } label: {
+                    Text(player.qualityProfileSelection?.description ?? "Automatic".localized())
+                        .foregroundColor(.accentColor)
+                        .frame(maxWidth: 240, alignment: .trailing)
+                        .opacity(0)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
-            .buttonStyle(.plain)
-            .foregroundColor(.accentColor)
             .frame(maxWidth: 240, alignment: .trailing)
             .frame(height: 40)
         #else
@@ -377,19 +423,27 @@ struct PlaybackSettings: View {
     @ViewBuilder private var streamButton: some View {
         #if os(macOS)
             StreamControl()
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                .modifier(SettingsPickerModifier())
+                .controlSize(.large)
+                .frame(width: 300, alignment: .trailing)
         #elseif os(iOS)
-            Menu {
-                StreamControl()
-            } label: {
+            ZStack {
                 Text(player.streamSelection?.resolutionAndFormat ?? "loading...")
-                    .frame(width: 140, height: 40, alignment: .trailing)
                     .foregroundColor(player.streamSelection == nil ? .secondary : .accentColor)
+                    .frame(width: 140, height: 40, alignment: .trailing)
+
+                Menu {
+                    StreamControl()
+                } label: {
+                    Text(player.streamSelection?.resolutionAndFormat ?? "loading...")
+                        .foregroundColor(player.streamSelection == nil ? .secondary : .accentColor)
+                        .frame(width: 140, height: 40, alignment: .trailing)
+                        .opacity(0)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
-            .buttonStyle(.plain)
-            .frame(height: 40, alignment: .trailing)
+            .frame(width: 140, height: 40, alignment: .trailing)
         #else
             StreamControl(focusedField: $focusedField)
         #endif
@@ -399,21 +453,17 @@ struct PlaybackSettings: View {
         let videoCaptions = player.currentVideo?.captions
         #if os(macOS)
             captionsPicker
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                .modifier(SettingsPickerModifier())
+                .controlSize(.large)
+                .frame(width: 300, alignment: .trailing)
         #elseif os(iOS)
-            Menu {
-                if videoCaptions?.isEmpty == false {
-                    captionsPicker
-                }
-            } label: {
+            ZStack {
                 HStack(spacing: 4) {
                     Image(systemName: "text.bubble")
                     if let captions = player.captions,
                        let language = LanguageCodes(rawValue: captions.code)
                     {
                         Text("\(language.description.capitalized) (\(language.rawValue))")
-                            .foregroundColor(.accentColor)
                     } else {
                         if videoCaptions?.isEmpty == true {
                             Text("Not available")
@@ -422,13 +472,38 @@ struct PlaybackSettings: View {
                         }
                     }
                 }
+                .foregroundColor(.accentColor)
                 .frame(alignment: .trailing)
                 .frame(height: 40)
-                .disabled(videoCaptions?.isEmpty == true)
+
+                Menu {
+                    if videoCaptions?.isEmpty == false {
+                        captionsPicker
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "text.bubble")
+                        if let captions = player.captions,
+                           let language = LanguageCodes(rawValue: captions.code)
+                        {
+                            Text("\(language.description.capitalized) (\(language.rawValue))")
+                        } else {
+                            if videoCaptions?.isEmpty == true {
+                                Text("Not available")
+                            } else {
+                                Text("Disabled")
+                            }
+                        }
+                    }
+                    .foregroundColor(.accentColor)
+                    .frame(alignment: .trailing)
+                    .frame(height: 40)
+                    .opacity(0)
+                    .disabled(videoCaptions?.isEmpty == true)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
-            .buttonStyle(.plain)
-            .foregroundColor(.accentColor)
         #else
             ControlsOverlayButton(focusedField: $focusedField, field: .captions) {
                 HStack(spacing: 8) {
@@ -469,23 +544,31 @@ struct PlaybackSettings: View {
     @ViewBuilder private var audioTrackButton: some View {
         #if os(macOS)
             audioTrackPicker
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                .modifier(SettingsPickerModifier())
+                .controlSize(.large)
+                .frame(width: 300, alignment: .trailing)
         #elseif os(iOS)
-            Menu {
-                audioTrackPicker
-            } label: {
-                Text(player.availableAudioTracks[player.selectedAudioTrackIndex].displayLanguage)
+            ZStack {
+                Text(player.selectedAudioTrack?.displayLanguage ?? "Original")
+                    .foregroundColor(.accentColor)
                     .frame(maxWidth: 240, alignment: .trailing)
+
+                Menu {
+                    audioTrackPicker
+                } label: {
+                    Text(player.selectedAudioTrack?.displayLanguage ?? "Original")
+                        .foregroundColor(.accentColor)
+                        .frame(maxWidth: 240, alignment: .trailing)
+                        .opacity(0)
+                }
+                .buttonStyle(.plain)
+                .transaction { t in t.animation = .none }
             }
-            .transaction { t in t.animation = .none }
-            .buttonStyle(.plain)
-            .foregroundColor(.accentColor)
             .frame(maxWidth: 240, alignment: .trailing)
             .frame(height: 40)
         #else
             ControlsOverlayButton(focusedField: $focusedField, field: .audioTrack) {
-                Text(player.availableAudioTracks[player.selectedAudioTrackIndex].displayLanguage)
+                Text(player.selectedAudioTrack?.displayLanguage ?? "Original")
                     .frame(maxWidth: 320)
             }
             .contextMenu {

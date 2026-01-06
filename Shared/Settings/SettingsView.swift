@@ -134,6 +134,9 @@ struct SettingsView: View {
                 settingsList
                     .navigationTitle("Settings")
             }
+            #if os(tvOS)
+            .background(Color.background(scheme: colorScheme).ignoresSafeArea())
+            #endif
         #endif
     }
 
@@ -164,6 +167,7 @@ struct SettingsView: View {
                                     Text("Not Selected")
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
                         Divider()
                     }
@@ -175,30 +179,45 @@ struct SettingsView: View {
                     } label: {
                         Label("Browsing", systemImage: "list.and.film").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     NavigationLink {
                         PlayerSettings()
                     } label: {
                         Label("Player", systemImage: "play.rectangle").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     NavigationLink {
                         PlayerControlsSettings()
                     } label: {
                         Label("Controls", systemImage: "hand.tap").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     NavigationLink {
                         QualitySettings()
                     } label: {
                         Label("Quality", systemImage: "4k.tv").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     NavigationLink {
                         HistorySettings()
                     } label: {
                         Label("History", systemImage: "clock.arrow.circlepath").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     if !accounts.isEmpty {
                         NavigationLink {
@@ -206,6 +225,9 @@ struct SettingsView: View {
                         } label: {
                             Label("SponsorBlock", systemImage: "dollarsign.circle").labelStyle(SettingsLabel())
                         }
+                        #if os(tvOS)
+                        .buttonStyle(.plain)
+                        #endif
                     }
 
                     NavigationLink {
@@ -213,12 +235,18 @@ struct SettingsView: View {
                     } label: {
                         Label("Locations", systemImage: "globe").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
 
                     NavigationLink {
                         AdvancedSettings()
                     } label: {
                         Label("Advanced", systemImage: "wrench.and.screwdriver").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
                 }
                 #if os(tvOS)
                 .padding(.horizontal, 20)
@@ -232,6 +260,9 @@ struct SettingsView: View {
                     } label: {
                         Label("Help", systemImage: "questionmark.circle").labelStyle(SettingsLabel())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.plain)
+                    #endif
                 }
                 #if os(tvOS)
                 .padding(.horizontal, 20)
@@ -287,6 +318,7 @@ struct SettingsView: View {
                     Label("Import Settings", systemImage: "square.and.arrow.down")
                         .labelStyle(SettingsLabel())
                 }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 20)
             #else
                 Button(action: importSettings) {
@@ -316,19 +348,19 @@ struct SettingsView: View {
             case .browsing:
                 return 800
             case .player:
-                return 800
+                return 850
             case .controls:
-                return 920
+                return 970
             case .quality:
-                return 420
+                return 450
             case .history:
                 return 600
             case .sponsorBlock:
-                return 970
+                return 980
             case .locations:
                 return 600
             case .advanced:
-                return 550
+                return 700
             case .importExport:
                 return 580
             case .help:

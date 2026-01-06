@@ -191,21 +191,21 @@ class Stream: Equatable, Hashable, Identifiable {
             return .unknown
         }
     }
-    
+
     struct AudioTrack: Hashable, Identifiable {
         let id = UUID().uuidString
         let url: URL
         let content: String?
         let language: String?
-        
+
         var displayLanguage: String {
             LanguageCodes(rawValue: language ?? "")?.description.capitalized ?? language ?? "Unknown"
         }
-        
+
         var description: String {
-            "\(displayLanguage) (\(content ?? "Unknown"))"
+            "\(displayLanguage) (\(content ?? "Original"))"
         }
-        
+
         var isDubbed: Bool {
             content?.lowercased().starts(with: "dubbed") ?? false
         }
@@ -291,8 +291,7 @@ class Stream: Equatable, Hashable, Identifiable {
 
     var description: String {
         guard localURL.isNil else { return resolutionAndFormat }
-        let instanceString = instance.isNil ? "" : " - (\(instance!.description))"
-        return format != .hls ? "\(resolutionAndFormat)\(instanceString)" : "adaptive (HLS)\(instanceString)"
+        return format != .hls ? "\(resolutionAndFormat)" : "adaptive (HLS)"
     }
 
     var resolutionAndFormat: String {

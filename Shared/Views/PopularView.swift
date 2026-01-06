@@ -48,11 +48,12 @@ struct PopularView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .refreshControl { refreshControl in
-            resource?.load().onCompletion { _ in
-                refreshControl.endRefreshing()
-            }
-            .onFailure { self.error = $0 }
-            .onSuccess { _ in self.error = nil }
+            resource?.load()
+                .onCompletion { _ in
+                    refreshControl.endRefreshing()
+                }
+                .onFailure { self.error = $0 }
+                .onSuccess { _ in self.error = nil }
         }
         .backport
         .refreshable {
@@ -89,21 +90,10 @@ struct PopularView: View {
 
     #if os(iOS)
         private var popularMenu: some View {
-            Menu {
-                ListingStyleButtons(listingStyle: $popularListingStyle)
-
-                Section {
-                    HideWatchedButtons()
-                    HideShortsButtons()
-                }
-
-                Section {
-                    SettingsButtons()
-                }
-            } label: {
+            ZStack {
                 HStack(spacing: 12) {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.up.right.circle.fill")
+                        Image(systemName: "chart.bar.fill")
                             .foregroundColor(.primary)
                             .imageScale(.small)
 
@@ -116,8 +106,38 @@ struct PopularView: View {
                         .foregroundColor(.accentColor)
                         .imageScale(.small)
                 }
-                .transaction { t in t.animation = nil }
+
+                Menu {
+                    ListingStyleButtons(listingStyle: $popularListingStyle)
+
+                    Section {
+                        HideWatchedButtons()
+                        HideShortsButtons()
+                    }
+
+                    Section {
+                        SettingsButtons()
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundColor(.primary)
+                                .imageScale(.small)
+
+                            Text("Popular")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                        }
+
+                        Image(systemName: "chevron.down.circle.fill")
+                            .foregroundColor(.accentColor)
+                            .imageScale(.small)
+                    }
+                    .opacity(0)
+                }
             }
+            .transaction { t in t.animation = nil }
         }
     #endif
 

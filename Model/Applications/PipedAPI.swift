@@ -135,6 +135,10 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
             FeedModel.shared.onAccountChange()
             SubscribedChannelsModel.shared.onAccountChange()
             PlaylistsModel.shared.onAccountChange()
+
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+            }
         }
     }
 
@@ -149,6 +153,9 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
               let username,
               let password
         else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+            }
             return
         }
 
@@ -184,11 +191,14 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
 
                 self.configure()
 
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
+
             case let .failure(error):
                 NavigationModel.shared.presentAlert(
                     title: "Account Error",
                     message: error.localizedDescription
                 )
+                NotificationCenter.default.post(name: .accountConfigurationComplete, object: nil)
             }
         }
     }
@@ -532,7 +542,10 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
 
         let channelId = details["uploaderUrl"]?.string?.components(separatedBy: "/").last ?? "unknown"
 
-        let thumbnails: [Thumbnail] = Thumbnail.Quality.allCases.compactMap {
+        let qualities = [
+            Thumbnail.Quality.maxresdefault, .high, .medium, .default, .start, .middle, .end
+        ]
+        let thumbnails: [Thumbnail] = qualities.compactMap {
             if let url = buildThumbnailURL(from: content, quality: $0) {
                 return Thumbnail(url: url, quality: $0)
             }
@@ -556,7 +569,8 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
            let formattedDate = dateFormatter.date(from: date)
         {
             publishedAt = formattedDate
-        } else {
+            published = ""
+        } else if published.isNil {
             published = (details["uploadedDate"] ?? details["uploadDate"])?.string ?? ""
         }
 
@@ -679,20 +693,60 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
             streams.append(Stream(instance: account.instance, hlsURL: hlsURL))
         }
 
-        let audioStreams = content
+        // Extract all M4A audio streams, sorted by bitrate (highest first)
+        let allAudioStreams = content
             .dictionaryValue["audioStreams"]?
             .arrayValue
             .filter { $0.dictionaryValue["format"]?.string == "M4A" }
-            .filter { stream in
-                let type = stream.dictionaryValue["audioTrackType"]?.string
-                return type == nil || type == "ORIGINAL"
-            }
             .sorted {
                 $0.dictionaryValue["bitrate"]?.int ?? 0 >
                     $1.dictionaryValue["bitrate"]?.int ?? 0
             } ?? []
 
-        guard let audioStream = audioStreams.first else {
+        // Group audio streams by track type and language, keeping highest bitrate for each
+        var audioTracksByType = [String: JSON]()
+        for audioStream in allAudioStreams {
+            let trackType = audioStream.dictionaryValue["audioTrackType"]?.string
+            let trackLocale = audioStream.dictionaryValue["audioTrackLocale"]?.string
+
+            // Create a unique key for this audio track combination
+            let key = "\(trackType ?? "ORIGINAL")_\(trackLocale ?? "")"
+
+            // Only keep the first (highest bitrate) stream for each unique track type/locale combination
+            if audioTracksByType[key] == nil {
+                audioTracksByType[key] = audioStream
+            }
+        }
+
+        // Convert to Stream.AudioTrack array
+        let audioTracks: [Stream.AudioTrack] = audioTracksByType.values.compactMap { audioStream in
+            guard let url = audioStream.dictionaryValue["url"]?.url else {
+                return nil
+            }
+
+            let trackType = audioStream.dictionaryValue["audioTrackType"]?.string
+            let trackLocale = audioStream.dictionaryValue["audioTrackLocale"]?.string
+
+            return Stream.AudioTrack(
+                url: url,
+                content: trackType,
+                language: trackLocale
+            )
+        }
+        .sorted { track1, track2 in
+            // Sort: ORIGINAL first, then DUBBED, then others
+            if track1.content == "ORIGINAL", track2.content != "ORIGINAL" {
+                return true
+            }
+            if track1.content != "ORIGINAL", track2.content == "ORIGINAL" {
+                return false
+            }
+            // If both are same type, sort by language
+            return (track1.language ?? "") < (track2.language ?? "")
+        }
+
+        // Fallback to first audio stream if no tracks were extracted
+        guard !audioTracks.isEmpty else {
             return streams
         }
 
@@ -704,13 +758,12 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
                 continue
             }
 
-            guard let audioAssetUrl = audioStream.dictionaryValue["url"]?.url,
-                  let videoAssetUrl = videoStream.dictionaryValue["url"]?.url
-            else {
+            guard let videoAssetUrl = videoStream.dictionaryValue["url"]?.url else {
                 continue
             }
 
-            let audioAsset = AVURLAsset(url: audioAssetUrl)
+            // Use the first (ORIGINAL) audio track as default
+            let defaultAudioAsset = AVURLAsset(url: audioTracks[0].url)
             let videoAsset = AVURLAsset(url: videoAssetUrl)
 
             let videoOnly = videoStream.dictionaryValue["videoOnly"]?.bool ?? true
@@ -738,13 +791,14 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
                 streams.append(
                     Stream(
                         instance: account.instance,
-                        audioAsset: audioAsset,
+                        audioAsset: defaultAudioAsset,
                         videoAsset: videoAsset,
                         resolution: resolution,
                         kind: .adaptive,
                         videoFormat: videoFormat,
                         bitrate: bitrate,
-                        requestRange: requestRange
+                        requestRange: requestRange,
+                        audioTracks: audioTracks
                     )
                 )
             } else {
@@ -819,7 +873,7 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
             return Chapter(title: title, image: image, start: start)
         }
     }
-    
+
     private func extractCaptions(from content: JSON) -> [Captions] {
         content["subtitles"].arrayValue.compactMap { details in
             guard let url = details["url"].url,
@@ -827,13 +881,13 @@ final class PipedAPI: Service, ObservableObject, VideosAPI {
                   let label = details["name"].string,
                   var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             else { return nil }
-            
+
             components.queryItems = components.queryItems?.map { item in
                 item.name == "fmt" ? URLQueryItem(name: "fmt", value: "srt") : item
             }
-            
+
             guard let newUrl = components.url else { return nil }
-            
+
             return Captions(label: label, code: code, url: newUrl)
         }
     }

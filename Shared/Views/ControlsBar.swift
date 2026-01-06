@@ -49,18 +49,15 @@ struct ControlsBar: View {
                     .frame(maxWidth: 120)
             }
         }
-
         .buttonStyle(.plain)
         .labelStyle(.iconOnly)
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
         .frame(maxHeight: barHeight)
         .padding(.trailing, expansionState == .mini && !controlsWhenMinimized ? 8 : 0)
-        .modifier(ControlBackgroundModifier(enabled: backgroundEnabled))
-        .clipShape(RoundedRectangle(cornerRadius: expansionState == .full || !playerBar ? 0 : 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: expansionState == .full || !playerBar ? 0 : 6)
-                .stroke(Color("ControlsBorderColor"), lineWidth: 0.5)
+        .applyControlsBackground(
+            enabled: backgroundEnabled,
+            cornerRadius: expansionState == .full || !playerBar ? 0 : 6
         )
         #if os(iOS)
         .background(
@@ -340,5 +337,81 @@ struct ControlsBar_Previews: PreviewProvider {
     static var previews: some View {
         ControlsBar(fullScreen: .constant(false), expansionState: .constant(.full))
             .injectFixtureEnvironmentObjects()
+    }
+}
+
+// MARK: - View Extension for Conditional Modifiers
+
+extension View {
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func applyControlsBackground(enabled: Bool, cornerRadius: Double) -> some View {
+        if enabled {
+            #if os(iOS)
+                if #available(iOS 26.0, *) {
+                    // Use Liquid Glass on iOS 26+
+                    self.glassEffect(
+                        .regular.interactive(),
+                        in: .rect(cornerRadius: cornerRadius)
+                    )
+                } else {
+                    // Fallback to ultraThinMaterial
+                    // swiftlint:disable:next deployment_target
+                    if #available(iOS 15.0, *) {
+                        self
+                            .background(
+                                RoundedRectangle(cornerRadius: cornerRadius)
+                                    .fill(.ultraThinMaterial)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: cornerRadius)
+                                    .stroke(Color("ControlsBorderColor"), lineWidth: 0.5)
+                            )
+                    } else {
+                        background(
+                            RoundedRectangle(cornerRadius: cornerRadius)
+                                .fill(Color.gray.opacity(0.3))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius)
+                                .stroke(Color("ControlsBorderColor"), lineWidth: 0.5)
+                        )
+                    }
+                }
+            #else
+                // Fallback to ultraThinMaterial for macOS and tvOS
+                // swiftlint:disable:next deployment_target
+                if #available(macOS 12.0, tvOS 15.0, *) {
+                    self
+                        .background(
+                            RoundedRectangle(cornerRadius: cornerRadius)
+                                .fill(.ultraThinMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius)
+                                .stroke(Color("ControlsBorderColor"), lineWidth: 0.5)
+                        )
+                } else {
+                    background(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(Color.gray.opacity(0.3))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .stroke(Color("ControlsBorderColor"), lineWidth: 0.5)
+                    )
+                }
+            #endif
+        } else {
+            background(Color.clear)
+        }
     }
 }

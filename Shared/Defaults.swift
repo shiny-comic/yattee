@@ -16,7 +16,7 @@ extension Defaults.Keys {
     static let widgetsSettings = Key<[WidgetSettings]>("widgetsSettings", default: [])
     static let startupSection = Key<StartupSection>("startupSection", default: .home)
     static let showSearchSuggestions = Key<Bool>("showSearchSuggestions", default: true)
-    static let visibleSections = Key<Set<VisibleSection>>("visibleSections", default: [.subscriptions, .trending, .playlists])
+    static let visibleSections = Key<Set<VisibleSection>>("visibleSections", default: [.subscriptions, .popular, .playlists])
 
     static let showOpenActionsToolbarItem = Key<Bool>("showOpenActionsToolbarItem", default: false)
     #if os(iOS)
@@ -192,7 +192,8 @@ extension Defaults.Keys {
                     hd1080p60MPVProfile,
                     hd1080pMPVProfile,
                     hd720p60MPVProfile,
-                    hd720pMPVProfile
+                    hd720pMPVProfile,
+                    hd720pAVPlayerProfile
                 ]
 
                 static let batteryCellularProfileDefault = hd720pMPVProfile.id
@@ -208,7 +209,8 @@ extension Defaults.Keys {
                     hd1080pMPVProfile,
                     hd720p60MPVProfile,
                     hd720pMPVProfile,
-                    sd360pMPVProfile
+                    sd360pMPVProfile,
+                    hd720pAVPlayerProfile
                 ]
 
                 static let batteryCellularProfileDefault = sd360pMPVProfile.id
@@ -361,6 +363,7 @@ extension Defaults.Keys {
 
     static let showPlayNowInBackendContextMenu = Key<Bool>("showPlayNowInBackendContextMenu", default: false)
     static let videoLoadingRetryCount = Key<Int>("videoLoadingRetryCount", default: 10)
+    static let avPlayerAllowsNonStreamableFormats = Key<Bool>("avPlayerAllowsNonStreamableFormats", default: false)
 
     static let showMPVPlaybackStats = Key<Bool>("showMPVPlaybackStats", default: false)
     static let mpvEnableLogging = Key<Bool>("mpvEnableLogging", default: false)
@@ -713,7 +716,7 @@ enum SponsorBlockColors: String {
     case music_offtopic = "#FF9900" // Orange
 
     // Define all cases, can be used to iterate over the colors
-    static let allCases: [SponsorBlockColors] = [Self.sponsor, Self.selfpromo, Self.interaction, Self.intro, Self.outro, Self.preview, Self.filler, Self.music_offtopic]
+    static let allCases: [Self] = [Self.sponsor, Self.selfpromo, Self.interaction, Self.intro, Self.outro, Self.preview, Self.filler, Self.music_offtopic]
 
     // Create a dictionary with the category names as keys and colors as values
     static let dictionary: [String: String] = {

@@ -104,11 +104,10 @@ final class MPVOGLView: GLKView {
 
     // Function to set a dirty region when a part of the screen changes
     func markRegionAsDirty(_ region: CGRect) {
-        if dirtyRegion == nil {
-            dirtyRegion = region
+        if var dirtyRegion {
+            self.dirtyRegion = dirtyRegion.union(region)
         } else {
-            // Expand the dirty region to include the new region
-            dirtyRegion = dirtyRegion!.union(region)
+            dirtyRegion = region
         }
     }
 
@@ -141,7 +140,7 @@ final class MPVOGLView: GLKView {
         glGetIntegerv(UInt32(GL_FRAMEBUFFER_BINDING), &defaultFBO!)
 
         // Ensure the framebuffer is valid
-        guard defaultFBO != nil && defaultFBO! != 0 else {
+        guard defaultFBO != nil, defaultFBO! != 0 else {
             logger.error("Invalid framebuffer ID.")
             return
         }
@@ -152,7 +151,6 @@ final class MPVOGLView: GLKView {
 
         // Check if we need partial updates
         if needsPartialUpdate() {
-            logger.info("Performing partial update with scissor test.")
             glEnable(GLenum(GL_SCISSOR_TEST))
         }
 
@@ -179,8 +177,6 @@ final class MPVOGLView: GLKView {
                 let result = mpv_render_context_render(OpaquePointer(mpvGL), &params)
                 if result < 0 {
                     logger.error("mpv_render_context_render() failed with error code: \(result)")
-                } else {
-                    logger.info("mpv_render_context_render() called successfully.")
                 }
             }
         }

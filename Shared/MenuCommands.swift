@@ -36,10 +36,12 @@ struct MenuCommands: Commands {
             .disabled(!AccountsModel.shared.app.supportsPopular)
             .keyboardShortcut("3")
 
-            Button("Trending") {
-                setTabSelection(.trending)
+            if FeatureFlags.trendingEnabled {
+                Button("Trending") {
+                    setTabSelection(.trending)
+                }
+                .keyboardShortcut("4")
             }
-            .keyboardShortcut("4")
 
             Button("Search") {
                 setTabSelection(.search)
@@ -76,7 +78,7 @@ struct MenuCommands: Commands {
             Button(togglePlayerLabel) {
                 PlayerModel.shared.togglePlayer()
             }
-            .keyboardShortcut("o")
+            .keyboardShortcut("p", modifiers: [.command, .shift])
         }
     }
 

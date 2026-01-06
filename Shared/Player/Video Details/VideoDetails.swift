@@ -49,6 +49,7 @@ struct VideoDetails: View {
                 .padding(.trailing, 5)
                 // TODO: when setting tvOS minimum to 16, the platform modifier can be removed
                 #if !os(tvOS)
+                    .accessibilityAddTraits(.isButton)
                     .simultaneousGesture(
                         TapGesture() // Ensures the button tap is recognized
                     )
@@ -63,11 +64,11 @@ struct VideoDetails: View {
                                 .lineLimit(1)
                             // TODO: when setting tvOS minimum to 16, the platform modifier can be removed
                             #if !os(tvOS)
+                                .accessibilityAddTraits(.isButton)
                                 .onTapGesture {
                                     guard let channel = video?.channel else { return }
                                     NavigationModel.shared.openChannel(channel, navigationStyle: .sidebar)
                                 }
-                                .accessibilityAddTraits(.isButton)
                             #endif
                         } else if model.videoBeingOpened != nil {
                             Text("Yattee")
@@ -188,6 +189,7 @@ struct VideoDetails: View {
     @Environment(\.navigationStyle) private var navigationStyle
     #if os(iOS)
         @Environment(\.verticalSizeClass) private var verticalSizeClass
+        @ObservedObject private var safeAreaModel = SafeAreaModel.shared
     #endif
 
     @Environment(\.colorScheme) private var colorScheme
@@ -396,7 +398,11 @@ struct VideoDetails: View {
                     }
                 }
             }
+            #if os(iOS)
+            .padding(.bottom, fullScreen ? max(60, safeAreaModel.safeArea.bottom + 20) : player.playerSize.height + safeAreaModel.safeArea.bottom + 20)
+            #else
             .padding(.bottom, 60)
+            #endif
         }
         #if os(iOS)
         .onAppear {

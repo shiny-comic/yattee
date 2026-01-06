@@ -181,19 +181,15 @@ struct ChannelVideosView: View {
         .navigationTitle(navigationTitle)
         #endif
 
-        return Group {
-            if #available(macOS 12.0, *) {
-                content
-                #if os(tvOS)
+        #if os(tvOS)
+            return content
                 .background(Color.background(scheme: colorScheme))
-                #endif
-                #if !os(iOS)
                 .focusScope(focusNamespace)
-                #endif
-            } else {
-                content
-            }
-        }
+        #elseif os(macOS)
+            return content.focusScope(focusNamespace)
+        #else
+            return content
+        #endif
     }
 
     var verticalCellsEdgesIgnoringSafeArea: Edge.Set {
@@ -263,26 +259,7 @@ struct ChannelVideosView: View {
 
     #if !os(tvOS)
         var channelMenu: some View {
-            Menu {
-                if let channel = presentedChannel {
-                    contentTypePicker
-                    Section {
-                        subscriptionToggleButton
-                        FavoriteButton(item: FavoriteItem(section: .channel(accounts.app.appType.rawValue, channel.id, channel.name)))
-                    }
-
-                    if subscriptions.isSubscribing(channel.id) {
-                        toggleWatchedButton
-                    }
-
-                    ListingStyleButtons(listingStyle: $channelPlaylistListingStyle)
-
-                    Section {
-                        HideWatchedButtons()
-                        HideShortsButtons()
-                    }
-                }
-            } label: {
+            ZStack {
                 HStack(spacing: 12) {
                     thumbnail
 
@@ -315,6 +292,61 @@ struct ChannelVideosView: View {
                         .imageScale(.small)
                 }
                 .frame(maxWidth: 320)
+
+                Menu {
+                    if let channel = presentedChannel {
+                        contentTypePicker
+                        Section {
+                            subscriptionToggleButton
+                            FavoriteButton(item: FavoriteItem(section: .channel(accounts.app.appType.rawValue, channel.id, channel.name)))
+                        }
+
+                        if subscriptions.isSubscribing(channel.id) {
+                            toggleWatchedButton
+                        }
+
+                        ListingStyleButtons(listingStyle: $channelPlaylistListingStyle)
+
+                        Section {
+                            HideWatchedButtons()
+                            HideShortsButtons()
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        thumbnail
+
+                        VStack(alignment: .leading) {
+                            Text(presentedChannel?.name ?? "Channel")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .layoutPriority(1)
+                                .frame(minWidth: 160, alignment: .leading)
+
+                            Group {
+                                HStack(spacing: 12) {
+                                    subscriptionsLabel
+
+                                    if presentedChannel?.verified ?? false {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .imageScale(.small)
+                                    }
+
+                                    viewsLabel
+                                }
+                                .frame(minWidth: 160, alignment: .leading)
+                            }
+                            .font(.caption2.bold())
+                            .foregroundColor(.secondary)
+                        }
+
+                        Image(systemName: "chevron.down.circle.fill")
+                            .foregroundColor(.accentColor)
+                            .imageScale(.small)
+                    }
+                    .frame(maxWidth: 320)
+                    .opacity(0)
+                }
             }
         }
     #endif

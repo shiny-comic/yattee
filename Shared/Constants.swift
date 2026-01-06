@@ -6,6 +6,7 @@ enum Constants {
     static let overlayAnimation = Animation.linear(duration: 0.2)
     static let aspectRatio16x9 = 16.0 / 9.0
     static let aspectRatio4x3 = 4.0 / 3.0
+    static let notificationCenterZoneHeight: Double = 60
 
     static var isAppleTV: Bool {
         #if os(iOS)
@@ -37,6 +38,32 @@ enum Constants {
         #else
             false
         #endif
+    }
+
+    static var isWindowFullscreen: Bool {
+        #if os(iOS)
+            guard let windowScene = UIApplication.shared.connectedScenes
+                .filter({ $0.activationState == .foregroundActive })
+                .compactMap({ $0 as? UIWindowScene })
+                .first,
+                let window = windowScene.windows.first
+            else {
+                return false
+            }
+
+            let screenBounds = windowScene.screen.bounds
+            let windowBounds = window.frame
+
+            // Check if window size matches screen bounds (accounting for small differences)
+            return abs(windowBounds.width - screenBounds.width) < 1 &&
+                abs(windowBounds.height - screenBounds.height) < 1
+        #else
+            return false
+        #endif
+    }
+
+    static var iPadSystemControlsWidth: Double {
+        50
     }
 
     static var isTvOS: Bool {
@@ -150,10 +177,8 @@ enum Constants {
         let iOS15 = [5]
         let iconName = "go\(type).\(interval)"
 
-        if #available(iOS 15, macOS 12, *) {
-            if iOS15.contains(interval) {
-                return iconName
-            }
+        if iOS15.contains(interval) {
+            return iconName
         }
 
         if allVersions.contains(interval) {

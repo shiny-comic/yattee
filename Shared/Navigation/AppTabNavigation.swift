@@ -37,7 +37,7 @@ struct AppTabNavigation: View {
                         popularNavigationView
                     }
 
-                    if visibleSections.contains(.trending) {
+                    if FeatureFlags.trendingEnabled && visibleSections.contains(.trending) {
                         trendingNavigationView
                     }
 
@@ -115,7 +115,7 @@ struct AppTabNavigation: View {
                 .toolbar { toolbarContent }
         }
         .tabItem {
-            Label("Popular", systemImage: "arrow.up.right.circle.fill")
+            Label("Popular", systemImage: "chart.bar.fill")
                 .accessibility(label: Text("Popular"))
         }
         .tag(TabSelection.popular)
@@ -126,7 +126,7 @@ struct AppTabNavigation: View {
             LazyView(TrendingView())
         }
         .tabItem {
-            Label("Trending", systemImage: "chart.bar.fill")
+            Label("Trending", systemImage: "arrow.up.right.circle.fill")
                 .accessibility(label: Text("Trending"))
         }
         .tag(TabSelection.trending)

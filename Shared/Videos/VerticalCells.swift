@@ -8,6 +8,7 @@ struct VerticalCells<Header: View>: View {
 
     @Environment(\.loadMoreContentHandler) private var loadMoreContentHandler
     @Environment(\.listingStyle) private var listingStyle
+    @Environment(\.navigationStyle) private var navigationStyle
 
     var items = [ContentItem]()
     var allowEmpty = false
@@ -49,15 +50,19 @@ struct VerticalCells<Header: View>: View {
             .padding()
         }
         .animation(nil)
-        .edgesIgnoringSafeArea(edgesIgnoringSafeArea)
+        #if os(iOS)
+            .edgesIgnoringSafeArea(navigationStyle == .sidebar ? [] : edgesIgnoringSafeArea)
+        #endif
         #if os(macOS)
-            .background(Color.secondaryBackground)
-            .frame(minWidth: Constants.contentViewMinWidth)
+        .background(Color.secondaryBackground)
+        .frame(minWidth: Constants.contentViewMinWidth)
         #endif
     }
 
     var contentItems: [ContentItem] {
-        items.isEmpty ? (allowEmpty ? items : ContentItem.placeholders) : items.sorted { $0 < $1 }
+        // Avoid sorting on every redraw - items should already be sorted from the source
+        // If sorting is truly needed, it should be done once in the model, not in the view
+        items.isEmpty ? (allowEmpty ? items : ContentItem.placeholders) : items
     }
 
     func loadMoreContentItemsIfNeeded(current item: ContentItem) {
@@ -79,7 +84,7 @@ struct VerticalCells<Header: View>: View {
         #if os(iOS)
             return verticalSizeClass == .regular ? 320 : 800
         #elseif os(tvOS)
-            return 600
+            return 560
         #else
             return 320
         #endif
@@ -87,7 +92,7 @@ struct VerticalCells<Header: View>: View {
 
     var adaptiveGridItemMaximumSize: Double {
         #if os(tvOS)
-            return 600
+            return 560
         #else
             return .infinity
         #endif

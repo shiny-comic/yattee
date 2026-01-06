@@ -102,6 +102,8 @@ final class MPVClient: ObservableObject {
         // Set the number of threads dynamically
         checkError(mpv_set_option_string(mpv, "vd-lavc-threads", "\(threads)"))
 
+        // AUDIO //
+
         // GPU //
 
         checkError(mpv_set_option_string(mpv, "hwdec", Defaults[.mpvHWdec]))
@@ -354,7 +356,7 @@ final class MPVClient: ObservableObject {
     func areSubtitlesAdded() async -> Bool {
         guard !mpv.isNil else { return false }
 
-        let trackCount = await Task(operation: { getInt("track-list/count") }).value
+        let trackCount = await Task { getInt("track-list/count") }.value
         guard trackCount > 0 else { return false }
 
         for index in 0 ..< trackCount {
@@ -422,7 +424,7 @@ final class MPVClient: ObservableObject {
                 #if os(iOS)
                     insets = OrientationTracker.shared.currentInterfaceOrientation.isPortrait ? SafeAreaModel.shared.safeArea.bottom : 0
                 #endif
-                let offsetY = max(0, model.playingFullScreen ? ((model.playerSize.height / 2.0) - ((height + insets) / 2)) : 0)
+                let offsetY = max(0, model.playingFullScreen ? ((model.playerSize.height / 2.0) - (height / 2)) : 0)
                 UIView.animate(withDuration: 0.2, animations: {
                     self.glView?.frame = CGRect(x: 0, y: offsetY, width: roundedWidth, height: height)
                 }) { completion in
@@ -509,7 +511,6 @@ final class MPVClient: ObservableObject {
                mode.refreshRate > 0
             {
                 refreshRate = Int(mode.refreshRate)
-                logger.info("Screen refresh rate: \(refreshRate) Hz")
             } else {
                 logger.warning("Failed to get refresh rate from NSScreen.")
             }
@@ -522,8 +523,6 @@ final class MPVClient: ObservableObject {
             if refreshRate <= 0 {
                 refreshRate = 60 // Fallback to 60 Hz
                 logger.warning("Failed to get refresh rate from UIScreen, falling back to 60 Hz.")
-            } else {
-                logger.info("Screen refresh rate: \(refreshRate) Hz")
             }
         #endif
 
@@ -666,11 +665,8 @@ final class MPVClient: ObservableObject {
     func glUpdate(_ ctx: UnsafeMutableRawPointer?) {
         let videoLayer = unsafeBitCast(ctx, to: VideoLayer.self)
 
-        videoLayer.client?.queue?.async {
-            if !videoLayer.isAsynchronous {
-                videoLayer.display()
-            }
-        }
+        // Request a redraw when MPV signals that new content is available
+        videoLayer.requestRedraw()
     }
 #else
     func getProcAddress(_: UnsafeMutableRawPointer?, _ name: UnsafePointer<Int8>?) -> UnsafeMutableRawPointer? {

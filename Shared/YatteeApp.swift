@@ -162,6 +162,23 @@ struct YatteeApp: App {
 
             SDWebImageManager.defaultImageCache = PINCache(name: "stream.yattee.app")
 
+            NotificationCenter.default.addObserver(
+                forName: .accountConfigurationComplete,
+                object: nil,
+                queue: .main
+            ) { _ in
+                let startupSection = Defaults[.startupSection]
+                var section: TabSelection? = startupSection.tabSelection
+
+                #if os(macOS)
+                    if section == .playlists {
+                        section = .search
+                    }
+                #endif
+
+                NavigationModel.shared.tabSelection = section ?? .search
+            }
+
             if !Defaults[.lastAccountIsPublic] {
                 AccountsModel.shared.configureAccount()
             }
@@ -179,17 +196,6 @@ struct YatteeApp: App {
                     recents.clear()
                 }
             }
-
-            let startupSection = Defaults[.startupSection]
-            var section: TabSelection? = startupSection.tabSelection
-
-            #if os(macOS)
-                if section == .playlists {
-                    section = .search
-                }
-            #endif
-
-            NavigationModel.shared.tabSelection = section ?? .search
 
             DispatchQueue.main.async {
                 playlists.load()
@@ -229,6 +235,10 @@ struct YatteeApp: App {
 
             DispatchQueue.global(qos: .userInitiated).async {
                 self.migrateQualityProfiles()
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.cleanupDisabledFeatures()
             }
 
             #if os(iOS)
@@ -284,6 +294,34 @@ struct YatteeApp: App {
             }
         }
     #endif
+
+    func cleanupDisabledFeatures() {
+        // Remove trending from visible sections if feature flag is disabled
+        if !FeatureFlags.trendingEnabled {
+            var visibleSections = Defaults[.visibleSections]
+            if visibleSections.contains(.trending) {
+                visibleSections.remove(.trending)
+                Defaults[.visibleSections] = visibleSections
+            }
+
+            // Reset startup section if set to trending
+            if Defaults[.startupSection] == .trending {
+                Defaults[.startupSection] = .home
+            }
+
+            // Remove trending favorites
+            let trendingFavorites = favorites.all.filter { item in
+                if case .trending = item.section {
+                    return true
+                }
+                return false
+            }
+
+            for favorite in trendingFavorites {
+                favorites.remove(favorite)
+            }
+        }
+    }
 
     var navigationStyle: NavigationStyle {
         #if os(iOS)

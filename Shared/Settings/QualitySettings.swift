@@ -24,12 +24,19 @@ struct QualitySettings: View {
                 List {
                     sections
                 }
+                #if os(tvOS)
+                .listStyle(.plain)
+                #elseif os(iOS)
+                .listStyle(.insetGrouped)
+                #endif
             #endif
         }
         .sheet(isPresented: $presentingProfileForm) {
             QualityProfileForm(qualityProfileID: $editedProfileID)
         }
         #if os(tvOS)
+        .buttonStyle(.plain)
+        .toggleStyle(TVOSPlainToggleStyle())
         .frame(maxWidth: 1000)
         #elseif os(iOS)
         .listStyle(.insetGrouped)
@@ -175,24 +182,14 @@ struct QualitySettings: View {
                 }
         }
 
-        if #available(macOS 12.0, *) {
-            #if os(macOS)
-                List {
-                    list
-                }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
-            #else
+        #if os(macOS)
+            List {
                 list
-            #endif
-        } else {
-            #if os(macOS)
-                List {
-                    list
-                }
-            #else
-                list
-            #endif
-        }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+        #else
+            list
+        #endif
     }
 }
 

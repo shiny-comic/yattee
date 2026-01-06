@@ -28,7 +28,7 @@ struct VideoPlayerView: View {
         #endif
     }
 
-    @State private var playerSize: CGSize = .zero { didSet { updateSidebarQueue() } }
+    @State private var playerSize: CGSize = .zero
     @State private var hoveringPlayer = false
     @State private var sidebarQueue = defaultSidebarQueueValue
 
@@ -77,6 +77,10 @@ struct VideoPlayerView: View {
 
     @ObservedObject var controlsOverlayModel = ControlOverlaysModel.shared // swiftlint:disable:this swiftui_state_private
 
+    var shouldShowCustomControls: Bool {
+        player.activeBackend == .mpv || !avPlayerUsesSystemControls || player.musicMode
+    }
+
     var body: some View {
         ZStack(alignment: overlayAlignment) {
             videoPlayer
@@ -104,14 +108,16 @@ struct VideoPlayerView: View {
                 content
                     .onAppear {
                         playerSize = geometry.size
+                        updateSidebarQueue()
                     }
             }
             .ignoresSafeArea(.all, edges: .bottom)
             #if os(iOS)
                 .frame(height: playerHeight.isNil ? nil : Double(playerHeight!))
             #endif
-                .onChange(of: geometry.size) { _ in
-                    self.playerSize = geometry.size
+                .onChange(of: geometry.size) { newSize in
+                    self.playerSize = newSize
+                    updateSidebarQueue()
                 }
             #if os(iOS)
                 .onChange(of: player.presentingPlayer) { newValue in
@@ -235,6 +241,13 @@ struct VideoPlayerView: View {
         }
 
         var playerHeight: Double? {
+            // On iPad, don't force a specific height in fullscreen mode
+            // This allows the player to properly fit within resizable windows
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                return nil
+            }
+
+            // For iPhone, use screen bounds to ensure proper fullscreen sizing
             let lockedPortrait = player.lockedOrientation?.contains(.portrait) ?? false
             let isPortrait = OrientationTracker.shared.currentInterfaceOrientation.isPortrait || lockedPortrait
             return fullScreenPlayer ? UIScreen.main.bounds.size.height - (isPortrait ? safeAreaModel.safeArea.top + safeAreaModel.safeArea.bottom : 0) : nil
@@ -243,7 +256,7 @@ struct VideoPlayerView: View {
 
     var content: some View {
         Group {
-            ZStack(alignment: .bottomLeading) {
+            ZStack(alignment: .topLeading) {
                 #if os(tvOS)
                     ZStack {
                         player.playerBackendView
@@ -255,64 +268,69 @@ struct VideoPlayerView: View {
                     .ignoresSafeArea()
                 #else
                     GeometryReader { geometry in
-                        player.playerBackendView
-                            .modifier(
-                                VideoPlayerSizeModifier(
-                                    geometry: geometry,
-                                    aspectRatio: player.aspectRatio,
-                                    fullScreen: fullScreenPlayer,
-                                    detailsHiddenInFullScreen: detailsHiddenInFullScreen
+                        ZStack(alignment: .top) {
+                            player.playerBackendView
+                                .modifier(
+                                    VideoPlayerSizeModifier(
+                                        geometry: geometry,
+                                        aspectRatio: player.aspectRatio,
+                                        fullScreen: fullScreenPlayer,
+                                        detailsHiddenInFullScreen: detailsHiddenInFullScreen
+                                    )
                                 )
-                            )
-                            .onHover { hovering in
-                                hoveringPlayer = hovering
-                                if hovering {
-                                    player.controls.show()
-                                } else {
-                                    player.controls.hide()
-                                }
-                            }
-                            .gesture(player.controls.presentingOverlays ? nil : playerDragGesture)
-                        #if os(macOS)
-                            .onAppear {
-                                NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) {
-                                    hoverThrottle.execute {
-                                        if !player.currentItem.isNil, hoveringPlayer {
-                                            player.controls.resetTimer()
+                                .onHover { hovering in
+                                    hoveringPlayer = hovering
+                                    // Only show/hide custom controls if they should be used
+                                    if shouldShowCustomControls {
+                                        if hovering {
+                                            player.controls.show()
+                                        } else {
+                                            player.controls.hide()
                                         }
                                     }
-
-                                    return $0
                                 }
-                            }
-                        #endif
-
-                            .background(Color.black)
-
-                        if !detailsHiddenInFullScreen {
-                            VideoDetails(
-                                video: player.videoForDisplay,
-                                fullScreen: $fullScreenDetails,
-                                sidebarQueue: $sidebarQueue
-                            )
-                            .modifier(VideoDetailsPaddingModifier(
-                                playerSize: player.playerSize,
-                                fullScreen: fullScreenDetails
-                            ))
+                                .gesture(player.controls.presentingOverlays ? nil : playerDragGesture)
                             #if os(macOS)
-                            // TODO: Check whether this is needed on macOS.
-                            .onDisappear {
-                                if player.presentingPlayer {
-                                    player.setNeedsDrawing(true)
+                                .onAppear {
+                                    NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) {
+                                        hoverThrottle.execute {
+                                            if !player.currentItem.isNil, hoveringPlayer, shouldShowCustomControls {
+                                                player.controls.resetTimer()
+                                            }
+                                        }
+
+                                        return $0
+                                    }
                                 }
-                            }
                             #endif
-                            .id(player.currentVideo?.cacheKey)
-                            .transition(.opacity)
-                            .offset(y: detailViewDragOffset)
-                            .gesture(detailsDragGesture)
-                        } else {
-                            VStack {}
+
+                                .background(Color.black)
+                                .zIndex(1)
+
+                            if !detailsHiddenInFullScreen {
+                                VideoDetails(
+                                    video: player.videoForDisplay,
+                                    fullScreen: $fullScreenDetails,
+                                    sidebarQueue: $sidebarQueue
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                .frame(height: geometry.size.height)
+                                #if os(macOS)
+                                    // TODO: Check whether this is needed on macOS.
+                                    .onDisappear {
+                                        if player.presentingPlayer {
+                                            player.setNeedsDrawing(true)
+                                        }
+                                    }
+                                #endif
+                                    .id(player.currentVideo?.cacheKey)
+                                    .transition(.opacity)
+                                    .offset(y: (fullScreenDetails ? 0 : player.playerSize.height) + detailViewDragOffset)
+                                    .gesture(detailsDragGesture)
+                                    .zIndex(2) // Ensure details are on top
+                            } else {
+                                VStack {}
+                            }
                         }
                     }
                 #endif

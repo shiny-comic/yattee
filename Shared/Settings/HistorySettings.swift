@@ -29,9 +29,16 @@ struct HistorySettings: View {
                 List {
                     sections
                 }
+                #if os(tvOS)
+                .listStyle(.plain)
+                #elseif os(iOS)
+                .listStyle(.insetGrouped)
+                #endif
             #endif
         }
         #if os(tvOS)
+        .buttonStyle(.plain)
+        .toggleStyle(TVOSPlainToggleStyle())
         .frame(maxWidth: 1000)
         #elseif os(iOS)
         .listStyle(.insetGrouped)
@@ -214,12 +221,12 @@ struct HistorySettings: View {
                     .labelStyle(.iconOnly)
                     .padding(7)
                     .foregroundColor(limitRecents ? .accentColor : .gray)
-                    .accessibilityAddTraits(.isButton)
                 #if os(iOS)
                     .frame(minHeight: 35)
                     .background(RoundedRectangle(cornerRadius: 4).strokeBorder(lineWidth: 1).foregroundColor(.accentColor))
                 #endif
                     .contentShape(Rectangle())
+                    .accessibilityAddTraits(.isButton)
                     .onTapGesture {
                         value.wrappedValue -= 1
                     }
@@ -246,11 +253,11 @@ struct HistorySettings: View {
                     .labelStyle(.iconOnly)
                     .padding(7)
                     .foregroundColor(limitRecents ? .accentColor : .gray)
-                    .accessibilityAddTraits(.isButton)
                 #if os(iOS)
                     .background(RoundedRectangle(cornerRadius: 4).strokeBorder(lineWidth: 1).foregroundColor(.accentColor))
                 #endif
                     .contentShape(Rectangle())
+                    .accessibilityAddTraits(.isButton)
                     .onTapGesture {
                         value.wrappedValue += 1
                     }

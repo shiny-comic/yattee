@@ -41,29 +41,28 @@ struct SearchView: View {
 
     #if os(iOS)
         var body: some View {
-            VStack {
+            GeometryReader { geometry in
                 VStack {
-                    if accounts.app.supportsSearchSuggestions, state.query.query != state.queryText {
-                        SearchSuggestions()
-                            .opacity(state.queryText.isEmpty ? 0 : 1)
-                    } else {
-                        results
+                    VStack {
+                        if accounts.app.supportsSearchSuggestions, state.query.query != state.queryText {
+                            SearchSuggestions()
+                                .opacity(state.queryText.isEmpty ? 0 : 1)
+                        } else {
+                            results
+                                .backport
+                                .scrollDismissesKeyboardInteractively()
+                        }
                     }
                 }
-                .backport
-                .scrollDismissesKeyboardInteractively()
-            }
-            .environment(\.listingStyle, searchListingStyle)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    if #available(iOS 15, *) {
+                .environment(\.listingStyle, searchListingStyle)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
                         FocusableSearchTextField()
-                    } else {
-                        SearchTextField()
+                            .frame(width: searchFieldWidth(geometry.size.width))
                     }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    searchMenu
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        searchMenu
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -213,6 +212,13 @@ struct SearchView: View {
                             HStack {
                                 Text("Sort:")
                                     .foregroundColor(.secondary)
+                                    .padding(.leading, {
+                                        if #available(macOS 26, *) {
+                                            return 12
+                                        } else {
+                                            return 0
+                                        }
+                                    }())
                                 searchSortOrderPicker
                             }
                         }
@@ -223,11 +229,7 @@ struct SearchView: View {
                         filtersMenu
                     }
 
-                    if #available(macOS 12, *) {
-                        FocusableSearchTextField()
-                    } else {
-                        SearchTextField()
-                    }
+                    FocusableSearchTextField()
                 }
             }
             .onAppear {
@@ -644,6 +646,26 @@ struct SearchView: View {
             searchSortOrder.rawValue
         ))
     }
+
+    #if os(iOS)
+        private func searchFieldWidth(_ viewWidth: Double) -> Double {
+            // Base padding for internal SearchTextField padding (16pt each side = 32 total)
+            var totalDeduction: Double = 32
+
+            // Add space for trailing menu button
+            totalDeduction += 44
+
+            // Add space for sidebar toggle button if in sidebar navigation style
+            if navigationStyle == .sidebar {
+                totalDeduction += 44
+            }
+
+            // Minimum width to ensure usability
+            let minWidth: Double = 200
+
+            return max(minWidth, viewWidth - totalDeduction)
+        }
+    #endif
 
     var shouldDisplayHeader: Bool {
         #if os(tvOS)

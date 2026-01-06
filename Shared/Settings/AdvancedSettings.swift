@@ -16,10 +16,12 @@ struct AdvancedSettings: View {
     @Default(.feedCacheSize) private var feedCacheSize
     @Default(.showPlayNowInBackendContextMenu) private var showPlayNowInBackendContextMenu
     @Default(.videoLoadingRetryCount) private var videoLoadingRetryCount
+    @Default(.avPlayerAllowsNonStreamableFormats) private var avPlayerAllowsNonStreamableFormats
 
     @State private var filesToShare = [MPVClient.logFile]
     @State private var presentingShareSheet = false
 
+    @ObservedObject private var player = PlayerModel.shared
     private var settings = SettingsModel.shared
 
     var body: some View {
@@ -31,7 +33,9 @@ struct AdvancedSettings: View {
                 List {
                     advancedSettings
                 }
-                #if os(iOS)
+                #if os(tvOS)
+                .listStyle(.plain)
+                #elseif os(iOS)
                 .sheet(isPresented: $presentingShareSheet) {
                     ShareSheet(activityItems: filesToShare)
                         .id("logs-\(filesToShare.count)")
@@ -41,6 +45,8 @@ struct AdvancedSettings: View {
             #endif
         }
         #if os(tvOS)
+        .buttonStyle(.plain)
+        .toggleStyle(TVOSPlainToggleStyle())
         .frame(maxWidth: 1000)
         #endif
         .navigationTitle("Advanced")
@@ -69,6 +75,10 @@ struct AdvancedSettings: View {
             videoLoadingRetryCountField
         }
 
+        Section(header: SettingsHeader(text: "AVPlayer"), footer: avPlayerNonStreamableFormatsFooter) {
+            avPlayerAllowsNonStreamableFormatsToggle
+        }
+
         Section(header: SettingsHeader(text: "MPV"), footer: mpvFooter) {
             showMPVPlaybackStatsToggle
             #if !os(tvOS)
@@ -80,13 +90,14 @@ struct AdvancedSettings: View {
                     Text("cache-pause-initial")
                     #if !os(tvOS)
                         Image(systemName: "link")
-                            .accessibilityAddTraits([.isButton, .isLink])
                             .font(.footnote)
                         #if os(iOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-pause-initial")!)
                             }
                         #elseif os(macOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-pause-initial")!)
                             }
@@ -100,13 +111,14 @@ struct AdvancedSettings: View {
                 Text("cache-secs")
                 #if !os(tvOS)
                     Image(systemName: "link")
-                        .accessibilityAddTraits([.isButton, .isLink])
                         .font(.footnote)
                     #if os(iOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-secs")!)
                         }
                     #elseif os(macOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-secs")!)
                         }
@@ -126,13 +138,14 @@ struct AdvancedSettings: View {
                     Text("cache-pause-wait")
                     #if !os(tvOS)
                         Image(systemName: "link")
-                            .accessibilityAddTraits([.isButton, .isLink])
                             .font(.footnote)
                         #if os(iOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-pause-wait")!)
                             }
                         #elseif os(macOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-cache-pause-wait")!)
                             }
@@ -153,13 +166,14 @@ struct AdvancedSettings: View {
                     Text("deinterlace")
                     #if !os(tvOS)
                         Image(systemName: "link")
-                            .accessibilityAddTraits([.isButton, .isLink])
                             .font(.footnote)
                         #if os(iOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-deinterlace")!)
                             }
                         #elseif os(macOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-deinterlace")!)
                             }
@@ -174,13 +188,14 @@ struct AdvancedSettings: View {
                     Text("initial-audio-sync")
                     #if !os(tvOS)
                         Image(systemName: "link")
-                            .accessibilityAddTraits([.isButton, .isLink])
                             .font(.footnote)
                         #if os(iOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-initial-audio-sync")!)
                             }
                         #elseif os(macOS)
+                            .accessibilityAddTraits([.isButton, .isLink])
                             .onTapGesture {
                                 NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-initial-audio-sync")!)
                             }
@@ -195,13 +210,14 @@ struct AdvancedSettings: View {
 
                 #if !os(tvOS)
                     Image(systemName: "link")
-                        .accessibilityAddTraits([.isButton, .isLink])
                         .font(.footnote)
                     #if os(iOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-hwdec")!)
                         }
                     #elseif os(macOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-hwdec")!)
                         }
@@ -224,13 +240,14 @@ struct AdvancedSettings: View {
 
                 #if !os(tvOS)
                     Image(systemName: "link")
-                        .accessibilityAddTraits([.isButton, .isLink])
                         .font(.footnote)
                     #if os(iOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             UIApplication.shared.open(URL(string: "https://mpv.io/manual/stable/#options-demuxer-lavf-probe-info")!)
                         }
                     #elseif os(macOS)
+                        .accessibilityAddTraits([.isButton, .isLink])
                         .onTapGesture {
                             NSWorkspace.shared.open(URL(string: "https://mpv.io/manual/stable/#options-demuxer-lavf-probe-info")!)
                         }
@@ -358,6 +375,22 @@ struct AdvancedSettings: View {
     var cacheSize: some View {
         Text(String(format: "Total size: %@".localized(), BaseCacheModel.shared.totalSizeFormatted))
             .foregroundColor(.secondary)
+    }
+
+    var avPlayerAllowsNonStreamableFormatsToggle: some View {
+        Toggle("Enable non-streamable formats (MP4/AVC1)", isOn: $avPlayerAllowsNonStreamableFormats)
+            .onChange(of: avPlayerAllowsNonStreamableFormats) { _ in
+                // Trigger refresh of available streams when setting changes
+                if let video = player.currentVideo {
+                    player.loadAvailableStreams(video)
+                }
+            }
+    }
+
+    @ViewBuilder var avPlayerNonStreamableFormatsFooter: some View {
+        Text("Non-streamable video formats (MP4/AVC1) may take a long time to start playback with AVPlayer. These formats require downloading metadata before playback can begin. Limited to 1080p maximum. For better performance with these formats, use MPV backend instead.")
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
